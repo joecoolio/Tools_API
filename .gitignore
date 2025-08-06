@@ -1,0 +1,5 @@
+.env
+composer.lock
+jwt.pem
+jwt.pub
+vendor/
