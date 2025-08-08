@@ -30,9 +30,21 @@ class Tool extends BaseModel {
                 with me as (
                     select id, home_address_point from neighbor where id = :neighborId
                 )
-                select t.id, t.owner_id, t.name, t.product_url, t.replacement_cost, ST_Distance(me.home_address_point, f.home_address_point) distance_m
+                select
+                    t.id,
+                    t.owner_id,
+                    t.name,
+                    t.product_url,
+                    t.replacement_cost,
+                    c.name category,
+                    c.icon category_icon,
+                    ST_Y(f.home_address_point::geometry) AS latitude,
+                    ST_X(f.home_address_point::geometry) AS longitude,
+                    ST_Distance(me.home_address_point, f.home_address_point) distance_m
                 from
                     tool t
+                    inner join tool_category c
+                    	on t.category = c.id
                     inner join neighbor f
                         on t.owner_id = f.id
                     inner join me

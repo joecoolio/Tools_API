@@ -1,4 +1,5 @@
 <?php
+use App\Models\Neighbor;
 use App\Models\Tool;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -151,13 +152,12 @@ $app->post('/v1/friends', function (Request $request, Response $response, array 
 ->add( new TimerMiddleware() )
 ;
 
-// Get all of my friends
-$app->post('/v1/getneighbor', function (Request $request, Response $response, array $args) {
+// Get all neighbors
+$app->post('/v1/getneighbors', function (Request $request, Response $response, array $args) {
     try {
-        $bodyArray = $request->getParsedBody();
-        $neighborId = $bodyArray['neighborId'];
+        $neighborId = $request->getAttribute("neighborId");
         
-        $retval = (new User())->getNeighbor($neighborId);
+        $retval = (new Neighbor())->listAllNeighbors($neighborId);
         $response->getBody()->write($retval);
         return $response;
     } catch (Exception $e) {
@@ -166,12 +166,6 @@ $app->post('/v1/getneighbor', function (Request $request, Response $response, ar
         return $badresponse->withStatus(500);
     }
 })
-// Make sure the user/pass values are in the body JSON
-->add( new ValidateMiddleware([
-    'neighborId' => 'required|int'
-]) )
-// Make sure the body is JSON formatted
-->add( new JSONBodyMiddleware() )
 // Audit
 ->add( new AuditMiddleware() )
 // Non-mandatory auth
