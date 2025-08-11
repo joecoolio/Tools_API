@@ -6,6 +6,27 @@ use \PDO;
 use \App\Util;
 
 class User extends BaseModel {
+    // Get my info
+    public function getInfo(int $neighborId) {
+        $pdo = Util::getDbConnection();
+
+        $sql = "
+            select
+                home_address,
+                ST_Y(home_address_point::geometry) AS latitude,
+                ST_X(home_address_point::geometry) AS longitude	
+            from neighbor
+            where id = :neighborId;
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(params: [
+            ':neighborId' => $neighborId
+        ]);
+        $results = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return json_encode($results);
+    }
+
     // Get all of your neighbor linkages + the referenced neighbors
     // When this runs, it puts the list of your friends in redis
     public function getFriends(int $neighborId): string {

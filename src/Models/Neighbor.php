@@ -7,6 +7,7 @@ use \App\Util;
 
 class Neighbor extends BaseModel {
     // Get all the neighbors and how far away each one is
+    // Make sure User.getFriends() has been called so redis is populated
     public function listAllNeighbors(int $neighborId): string {
         $pdo = Util::getDbConnection();
         $stmt = $pdo->prepare('
@@ -26,8 +27,18 @@ class Neighbor extends BaseModel {
         ');
 
         $stmt->execute(params: [ ':neighborId' => $neighborId ]);
-        $tools = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $neighbors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return json_encode($tools );
+        // Get friends from redis
+        $redis = Util::getRedisConnection();
+        $redisFriendKey = "$neighborId-friends";
+        $friends = json_decode($redis->get($redisFriendKey));
+
+        // Tag each neighbor as a friend or not
+        foreach ($neighbors as &$neighbor) {
+            $neighbor['is_friend'] = in_array($neighbor['id'], $friends);
+        }
+
+        return json_encode($neighbors );
     }
 }

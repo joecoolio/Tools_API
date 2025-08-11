@@ -130,6 +130,29 @@ $app->post('/v1/auth/refresh', [new AuthRefreshToken(), 'process'])
 // User
 /////
 
+// Get my info (including location)
+$app->post('/v1/myinfo', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+        
+        $retval = (new User())->getInfo($neighborId);
+        $response->getBody()->write($retval);
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+
 // Get all of my friends
 $app->post('/v1/friends', function (Request $request, Response $response, array $args) {
     try {
@@ -146,7 +169,7 @@ $app->post('/v1/friends', function (Request $request, Response $response, array 
 })
 // Audit
 ->add( new AuditMiddleware() )
-// Non-mandatory auth
+// Mandatory auth
 ->add( new AuthMiddleware() )
 // Time each request
 ->add( new TimerMiddleware() )
@@ -168,7 +191,7 @@ $app->post('/v1/getneighbors', function (Request $request, Response $response, a
 })
 // Audit
 ->add( new AuditMiddleware() )
-// Non-mandatory auth
+// Mandatory auth
 ->add( new AuthMiddleware() )
 // Time each request
 ->add( new TimerMiddleware() )
@@ -190,7 +213,7 @@ $app->post('/v1/getmytools', function (Request $request, Response $response, arr
 })
 // Audit
 ->add( new AuditMiddleware() )
-// Non-mandatory auth
+// Mandatory auth
 ->add( new AuthMiddleware() )
 // Time each request
 ->add( new TimerMiddleware() )
@@ -213,7 +236,7 @@ $app->post('/v1/getalltools', function (Request $request, Response $response, ar
 })
 // Audit
 ->add( new AuditMiddleware() )
-// Non-mandatory auth
+// Mandatory auth
 ->add( new AuthMiddleware() )
 // Time each request
 ->add( new TimerMiddleware() )
