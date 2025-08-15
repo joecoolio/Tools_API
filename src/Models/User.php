@@ -13,6 +13,7 @@ class User extends BaseModel {
         $sql = "
             select
                 home_address,
+                photo_link,
                 ST_Y(home_address_point::geometry) AS latitude,
                 ST_X(home_address_point::geometry) AS longitude	
             from neighbor
@@ -27,9 +28,9 @@ class User extends BaseModel {
         return json_encode($results);
     }
 
-    // Get all of your neighbor linkages + the referenced neighbors
+        // Get all of your neighbor linkages + the referenced neighbors
     // When this runs, it puts the list of your friends in redis
-    public function getFriends(int $neighborId): string {
+    public function reloadFriends(int $neighborId): string {
         $pdo = Util::getDbConnection();
         $redis = Util::getRedisConnection();
         $redisFriendKey = "$neighborId-friends";
@@ -93,13 +94,35 @@ class User extends BaseModel {
 
         // Store friends to redis - the proximity filter can then use this for filters later
         $redis->set($redisFriendKey, json_encode($neighborIds));
+    }
+
+    // Get all of your neighbor linkages + the referenced neighbors
+    // When this runs, it puts the list of your friends in redis
+    public function getFriends(int $neighborId): string {
+        $pdo = Util::getDbConnection();
+        $redis = Util::getRedisConnection();
+        $redisFriendKey = "$neighborId-friends";
+
+        // Remove the item from redis
+        if (!$redis->exists($redisFriendKey)) {
+            $this->reloadFriends($neighborId);
+        }
+
+        $neighborIds = json_decode($redis->get($redisFriendKey));
 
         // Get the neighbor objects that correspond to all the friends
         $sql = "
             with me as (
                 select id, home_address_point from neighbor where id = :neighborId
             )
-            select f.id, f.name, f.home_address, f.home_address_point, ST_Distance(me.home_address_point, f.home_address_point) distance_m
+            select
+                f.id,
+                f.name,
+                f.home_address,
+                f.photo_link,
+                ST_Y(f.home_address_point::geometry) AS latitude,
+                ST_X(f.home_address_point::geometry) AS longitude,
+                ST_Distance(me.home_address_point, f.home_address_point) distance_m
             from
                 neighbor f
                 inner join me
@@ -115,7 +138,7 @@ class User extends BaseModel {
         ]);
         $neighbors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        return json_encode([ "friends" => $friend_results, "neighbors" => $neighbors ]);
+        return json_encode($neighbors);
     }
 
 }

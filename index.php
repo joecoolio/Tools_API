@@ -153,7 +153,29 @@ $app->post('/v1/myinfo', function (Request $request, Response $response, array $
 ;
 
 
-// Get all of my friends
+// Refresh friend list in redis
+$app->post('/v1/reloadfriends', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+        
+        $retval = (new User())->reloadFriends($neighborId);
+        $response->getBody()->write('{ "result": "success" }');
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Get all of my friends (using the cached list)
 $app->post('/v1/friends', function (Request $request, Response $response, array $args) {
     try {
         $neighborId = $request->getAttribute("neighborId");
@@ -197,6 +219,66 @@ $app->post('/v1/getneighbors', function (Request $request, Response $response, a
 ->add( new TimerMiddleware() )
 ;
 
+// Get a single neighbor
+$app->post('/v1/getneighbor', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $neighborId = $bodyArray["neighborId"];
+
+        $retval = (new Neighbor())->getNeighbor($neighborId, $myNeighborId);
+        $response->getBody()->write($retval);
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'neighborId' => 'required|integer'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Get the photo for a neighbor
+$app->post('/v1/getImage', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $photo_id = $bodyArray["photo_id"];
+
+        $response = (new Neighbor())->getPhoto($photo_id, $response, /*$myNeighborId**/);
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'photo_id' => 'required'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+
 // List all of my tools
 $app->post('/v1/getmytools', function (Request $request, Response $response, array $args) {
     try {
@@ -234,6 +316,37 @@ $app->post('/v1/getalltools', function (Request $request, Response $response, ar
         return $badresponse->withStatus(500);
     }
 })
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// List all tools available to me
+$app->post('/v1/gettool', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+        
+        $bodyArray = $request->getParsedBody();
+        $toolId = $bodyArray["id"];
+        
+        $retval = (new Tool())->getTool($toolId, $neighborId);
+        $response->getBody()->write($retval);
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'id' => 'required|integer'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
 // Audit
 ->add( new AuditMiddleware() )
 // Mandatory auth

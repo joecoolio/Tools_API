@@ -65,4 +65,28 @@ class Tool extends BaseModel {
             return json_encode([]);
         }
     }
+
+    // Get info about a single tool
+    public function getTool(int $toolId, int $neighborId): string {
+        $pdo = Util::getDbConnection();
+        $stmt = $pdo->prepare("
+            select
+                id,	
+                owner_id,
+                name,
+                product_url,
+                replacement_cost,
+                category
+            from tool
+            where id = :toolId
+        ");
+
+        $stmt->execute(params: [ ':toolId' => $toolId ]);
+        $tool = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // TODO: Make sure the person calling this is allowed to see it (via friends in redis?)
+
+        return json_encode($tool );
+    }
+
 }
