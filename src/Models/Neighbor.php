@@ -64,7 +64,7 @@ class Neighbor extends BaseModel {
 
     // Get all the neighbors and how far away each one is
     // Make sure User.getFriends() has been called so redis is populated
-    public function listAllNeighbors(int $neighborId): string {
+    public function listAllNeighbors(int $neighborId, int $radius_miles = 9999): string {
         $pdo = Util::getDbConnection();
         $stmt = $pdo->prepare('
             with me as (
@@ -80,9 +80,13 @@ class Neighbor extends BaseModel {
                 neighbor f
                 inner join me
                     on f.id != me.id
+            where
+            	ST_Distance(me.home_address_point, f.home_address_point) <= :radius
         ');
-
-        $stmt->execute(params: [ ':neighborId' => $neighborId ]);
+        $stmt->execute(params: [
+            ':neighborId' => $neighborId,
+            ':radius' => $radius_miles * 1.60934 * 1000
+        ]);
         $neighbors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Get friends from redis

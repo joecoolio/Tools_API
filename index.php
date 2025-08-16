@@ -201,8 +201,13 @@ $app->post('/v1/friends', function (Request $request, Response $response, array 
 $app->post('/v1/getneighbors', function (Request $request, Response $response, array $args) {
     try {
         $neighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $radiusMiles = 9999; //default infinity
+        if (in_array("radius_miles", $bodyArray)) {
+            $radiusMiles = $bodyArray["radius_miles"];
+        }
         
-        $retval = (new Neighbor())->listAllNeighbors($neighborId);
+        $retval = (new Neighbor())->listAllNeighbors($neighborId, $radiusMiles);
         $response->getBody()->write($retval);
         return $response;
     } catch (Exception $e) {
@@ -211,6 +216,12 @@ $app->post('/v1/getneighbors', function (Request $request, Response $response, a
         return $badresponse->withStatus(500);
     }
 })
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'radius_miles' => 'numeric'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
 // Audit
 ->add( new AuditMiddleware() )
 // Mandatory auth
