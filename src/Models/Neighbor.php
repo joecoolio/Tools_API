@@ -38,7 +38,7 @@ class Neighbor extends BaseModel {
         $friends = json_decode($redis->get($redisFriendKey), true);
 
         // Tag as a friend or not
-        $neighbor['is_friend'] = in_array($neighbor['id'], $friends);
+        $neighbor['is_friend'] = array_key_exists($neighbor['id'], $friends);
 
         // Add the friend level to the results by looking it up
         $neighbor['depth'] = $friends[$neighbor['id']]['depth'];
