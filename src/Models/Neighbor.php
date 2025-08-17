@@ -35,10 +35,13 @@ class Neighbor extends BaseModel {
         // Get friends from redis
         $redis = Util::getRedisConnection();
         $redisFriendKey = "$myNeighborId-friends";
-        $friends = json_decode($redis->get($redisFriendKey));
+        $friends = json_decode($redis->get($redisFriendKey), true);
 
         // Tag as a friend or not
         $neighbor['is_friend'] = in_array($neighbor['id'], $friends);
+
+        // Add the friend level to the results by looking it up
+        $neighbor['depth'] = $friends[$neighbor['id']]['depth'];
 
         return json_encode($neighbor );
     }
@@ -81,7 +84,11 @@ class Neighbor extends BaseModel {
                 inner join me
                     on f.id != me.id
             where
-            	ST_Distance(me.home_address_point, f.home_address_point) <= :radius
+                ST_DWithin(
+                    f.home_address_point,
+                    me.home_address_point,
+                    :radius
+                )
         ');
         $stmt->execute(params: [
             ':neighborId' => $neighborId,
@@ -92,11 +99,15 @@ class Neighbor extends BaseModel {
         // Get friends from redis
         $redis = Util::getRedisConnection();
         $redisFriendKey = "$neighborId-friends";
-        $friends = json_decode($redis->get($redisFriendKey));
+        $friends = json_decode($redis->get($redisFriendKey), true);
+        // Get all the friend IDs as an array
+        $friendIds = array_column($friends, "friend_id");
 
         // Tag each neighbor as a friend or not
+        // Add the friend level to the results by looking it up
         foreach ($neighbors as &$neighbor) {
-            $neighbor['is_friend'] = in_array($neighbor['id'], $friends);
+            $neighbor['is_friend'] = in_array($neighbor['id'], $friendIds);
+            $neighbor['depth'] = $friends[$neighbor['id']]['depth'];
         }
 
         return json_encode($neighbors );

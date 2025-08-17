@@ -179,8 +179,10 @@ $app->post('/v1/reloadfriends', function (Request $request, Response $response, 
 $app->post('/v1/friends', function (Request $request, Response $response, array $args) {
     try {
         $neighborId = $request->getAttribute("neighborId");
-        
-        $retval = (new User())->getFriends($neighborId);
+        $bodyArray = $request->getParsedBody();
+        $depth = $bodyArray["depth"];
+
+        $retval = (new User())->getFriends($neighborId, $depth);
         $response->getBody()->write($retval);
         return $response;
     } catch (Exception $e) {
@@ -189,6 +191,12 @@ $app->post('/v1/friends', function (Request $request, Response $response, array 
         return $badresponse->withStatus(500);
     }
 })
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'depth' => 'required|numeric'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
 // Audit
 ->add( new AuditMiddleware() )
 // Mandatory auth

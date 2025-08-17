@@ -28,7 +28,7 @@ class User extends BaseModel {
         return json_encode($results);
     }
 
-        // Get all of your neighbor linkages + the referenced neighbors
+    // Get all of your neighbor linkages + the referenced neighbors
     // When this runs, it puts the list of your friends in redis
     public function reloadFriends(int $neighborId): string {
         $pdo = Util::getDbConnection();
@@ -70,13 +70,6 @@ class User extends BaseModel {
                     on nf.friend_id = f.id
                 inner join me 
                     on :radius_m = :radius_m
-                    /* This is how you can filter to friends in some radius
-                    // on ST_DWithin(
-                    //     f.home_address_point,
-                    //     me.home_address_point,
-                    //     :radius_m
-                    // )
-                    */
             where rn = 1
         ";
         $stmt = $pdo->prepare($sql);
@@ -87,18 +80,30 @@ class User extends BaseModel {
         $friend_results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Get each distinct neighborId into an array
-        $neighborIds = [];
-        foreach ($friend_results as $friend) {
-            array_push($neighborIds, $friend['friend_id']);
-        }
+        // $neighborIds = [];
+        // foreach ($friend_results as $friend) {
+            // array_push($neighborIds, $friend['friend_id']);
+        // }
 
         // Store friends to redis - the proximity filter can then use this for filters later
-        $redis->set($redisFriendKey, json_encode($neighborIds));
+        // $redis->set($redisFriendKey, json_encode($neighborIds));
+        // Store friends as {id: <friend>} in an associative array
+        $assocArray = [];
+        foreach ($friend_results as $friend) {
+            if (isset($friend['friend_id'])) {
+                $assocArray[$friend['friend_id']] = $friend;
+            }
+        }
+
+        $redis->set($redisFriendKey, json_encode($assocArray));
+
+        return "success";
     }
 
-    // Get all of your neighbor linkages + the referenced neighbors
-    // When this runs, it puts the list of your friends in redis
-    public function getFriends(int $neighborId): string {
+    // Get all of your friends
+    // Level 1 are direct friends, level 2 are friends of them, etc.
+    // If friends haven't been retrieved, that happens automatically.
+    public function getFriends(int $neighborId, int $level = 999): string {
         $pdo = Util::getDbConnection();
         $redis = Util::getRedisConnection();
         $redisFriendKey = "$neighborId-friends";
@@ -108,7 +113,10 @@ class User extends BaseModel {
             $this->reloadFriends($neighborId);
         }
 
-        $neighborIds = json_decode($redis->get($redisFriendKey));
+        $friends = json_decode($redis->get($redisFriendKey), true);
+
+        // Filter friends by depth
+        $friends = array_filter($friends, fn($item) => $item['depth'] <= $level);
 
         // Get the neighbor objects that correspond to all the friends
         $sql = "
@@ -130,6 +138,10 @@ class User extends BaseModel {
             where f.id = any(:friendIds)
         ";
         $stmt = $pdo->prepare($sql);
+
+        // Get all the friend IDs as an array
+        $neighborIds = array_column($friends,"friend_id");
+
         $pgArrayString = '{' . implode(',', $neighborIds) . '}';
         error_log("Pg: " . $pgArrayString);
         $stmt->execute([ 
@@ -137,6 +149,11 @@ class User extends BaseModel {
             ':friendIds' => $pgArrayString
         ]);
         $neighbors = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Add the friend level to the results by looking it up
+        foreach ($neighbors as &$neighbor) {
+            $neighbor['depth'] = $friends[$neighbor['id']]['depth'];
+        }
 
         return json_encode($neighbors);
     }
