@@ -143,7 +143,6 @@ class User extends BaseModel {
         $neighborIds = array_column($friends,"friend_id");
 
         $pgArrayString = '{' . implode(',', $neighborIds) . '}';
-        error_log("Pg: " . $pgArrayString);
         $stmt->execute([ 
             ':neighborId' => $neighborId,
             ':friendIds' => $pgArrayString

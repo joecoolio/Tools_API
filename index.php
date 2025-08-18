@@ -211,9 +211,7 @@ $app->post('/v1/getneighbors', function (Request $request, Response $response, a
         $neighborId = $request->getAttribute("neighborId");
         $bodyArray = $request->getParsedBody();
         $radiusMiles = 9999; //default infinity
-        if (in_array("radius_miles", $bodyArray)) {
-            $radiusMiles = $bodyArray["radius_miles"];
-        }
+        $radiusMiles = $bodyArray["radius_miles"];
         
         $retval = (new Neighbor())->listAllNeighbors($neighborId, $radiusMiles);
         $response->getBody()->write($retval);
@@ -226,7 +224,7 @@ $app->post('/v1/getneighbors', function (Request $request, Response $response, a
 })
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
-    'radius_miles' => 'numeric'
+    'radius_miles' => 'required|numeric'
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
@@ -286,6 +284,66 @@ $app->post('/v1/getImage', function (Request $request, Response $response, array
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
     'photo_id' => 'required'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Create a friendship
+$app->post('/v1/addfriendship', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $neighborId = $bodyArray["neighborId"];
+
+        (new Neighbor())->addFriendship($myNeighborId, $neighborId);
+        $response->getBody()->write('{ "result": "success" }');
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'neighborId' => 'required|integer'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Delete a friendship
+$app->post('/v1/removefriendship', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $neighborId = $bodyArray["neighborId"];
+
+        (new Neighbor())->removeFriendship($myNeighborId, $neighborId);
+        $response->getBody()->write('{ "result": "success" }');
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'neighborId' => 'required|integer'
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )

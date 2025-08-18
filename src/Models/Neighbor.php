@@ -5,6 +5,7 @@ namespace App\Models;
 use \PDO;
 use \App\Util;
 use Psr\Http\Message\ResponseInterface as Response;
+use Rakit\Validation\Rules\Boolean;
 use \Slim\Psr7\Stream;
 
 
@@ -21,6 +22,8 @@ class Neighbor extends BaseModel {
                 f.name,
                 f.photo_link,
                 f.home_address,
+                ST_Y(f.home_address_point::geometry) AS latitude,
+                ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
             from
                 neighbor f,
@@ -76,6 +79,8 @@ class Neighbor extends BaseModel {
             select
                 f.id,
                 f.name,
+                f.photo_link,
+                f.home_address,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
@@ -107,9 +112,41 @@ class Neighbor extends BaseModel {
         // Add the friend level to the results by looking it up
         foreach ($neighbors as &$neighbor) {
             $neighbor['is_friend'] = in_array($neighbor['id'], $friendIds);
-            $neighbor['depth'] = $friends[$neighbor['id']]['depth'];
+            if($neighbor['is_friend']) {
+                $neighbor['depth'] = $friends[$neighbor['id']]['depth'];
+            }
         }
 
         return json_encode($neighbors );
     }
+
+    // Create a friendship between 2 users.
+    // This is a one-way friendship, it does not add it two-ways.
+    public function addFriendship(int $sourceNeighborId, int $targetNeighborId): void {
+        $pdo = Util::getDbConnection();
+        $stmt = $pdo->prepare("            
+            insert into friendship (neighbor_id, friend_id)
+            values (:source, :target)
+            on conflict do nothing
+        ");
+        $stmt->execute(params: [
+            ":source" => $sourceNeighborId,
+            ":target" => $targetNeighborId
+        ]);
+    }
+
+    // Delete a friendship between 2 users.
+    public function removeFriendship(int $sourceNeighborId, int $targetNeighborId): void {
+        $pdo = Util::getDbConnection();
+        $stmt = $pdo->prepare("
+            delete from friendship
+            where neighbor_id = :source
+            and friend_id = :target
+        ");
+        $stmt->execute(params: [
+            ":source" => $sourceNeighborId,
+            ":target" => $targetNeighborId
+        ]);
+    }
+
 }
