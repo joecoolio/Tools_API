@@ -160,4 +160,65 @@ class User extends BaseModel {
         return json_encode($neighbors);
     }
 
+    // Do a geocode lookup of an address to make sure it's useable.
+    // Returns true if the geocode worked.
+    public function validateAddress(string $address) : bool {
+        $pdo = Util::getDbConnection();
+        $stmt = $pdo->prepare("
+            SELECT ST_SetSRID(ST_SnapToGrid((g).geomout, 0.00001), 4326)
+            FROM geocode(:address, 1) AS g
+        ");
+        $stmt->execute(params: [ ':address' => $address ]);
+        return $stmt->rowCount() == 1;
+    }
+
+    // Update personal info
+    public function updateInfo(
+        string $neighborId,
+        string $name,
+        string $nickname,
+        ?string $password,
+        string $address,
+        $photoFile,
+        $uploadDirectory
+    ) : void {
+        // Upload the file first and get the returned filename
+        $filename = null;
+        if ($photoFile != null) {
+            $filename = (new File())->uploadFile($uploadDirectory, $photoFile);
+        }
+
+        // Reset the password next
+        $hashedPassword = null;
+        if ($password != null) {
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        }
+
+        // Update all the data
+        $data = [
+            'name' => $name,
+            'nickname' => $nickname,
+            'home_address' => $address,
+        ];
+        if ($filename) $data['photo_link'] = $filename;
+        if ($hashedPassword != null) $data['password_hash'] = $hashedPassword;
+
+        // Prep (x=y) fields & placeholders
+        $fields = array_keys($data);
+        $placeholders = array_map(fn($f) => ":$f", $fields);
+        $kvs = array_map(fn($f) => "$f = :$f", $fields);
+
+        // Add neighborid to the data
+        $data['neighborId'] = $neighborId;
+
+        // Run an update
+        $pdo = Util::getDbConnection();
+        $sql =
+            "update neighbor set " . 
+            implode(', ', $kvs) . " " .
+            "where id = :neighborId";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($data);
+    }
+
 }

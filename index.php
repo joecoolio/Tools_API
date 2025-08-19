@@ -1,8 +1,6 @@
 <?php
-use App\Models\Neighbor;
-use App\Models\Tool;
-use Psr\Http\Message\ResponseInterface as Response;
-use Psr\Http\Message\ServerRequestInterface as Request;
+use Slim\Http\Response as Response;
+use Slim\Http\ServerRequest as Request;
 use Psr\Http\Server\RequestHandlerInterface as RequestHandler;
 
 use Slim\Factory\AppFactory;
@@ -10,10 +8,12 @@ use Slim\Routing\RouteContext;
 
 // // Middleware classes
 use App\Middleware\JSONBodyMiddleware;
+use App\Middleware\MultiPartBodyMiddleware;
 use App\Middleware\TimerMiddleware;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\AuthMiddlewareNonMandatory;
 use App\Middleware\ValidateMiddleware;
+use App\Middleware\MultiPartValidateMiddleware;
 use App\Middleware\AuditMiddleware;
 
 // // Auth classes
@@ -22,8 +22,10 @@ use App\Auth\AuthUserRegister;
 use App\Auth\AuthRefreshToken;
 
 // // User clases
-// use App\Models\LakeLevel;
+use App\Models\Neighbor;
+use App\Models\Tool;
 use App\Models\User;
+use App\Models\File;
 
 require 'vendor/autoload.php';
 
@@ -152,13 +154,79 @@ $app->post('/v1/myinfo', function (Request $request, Response $response, array $
 ->add( new TimerMiddleware() )
 ;
 
+// Validate an address
+$app->post('/v1/validateaddress', function (Request $request, Response $response, array $args) {
+    try {
+        $bodyArray = $request->getParsedBody();
+        $address = $bodyArray["address"];
+
+        $retval = (new User())->validateAddress($address);
+        return $response->withJson([ "result" => $retval ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'address' => 'required'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddlewareNonMandatory() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Update my info
+$app->post('/v1/updateinfo', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+
+        $name = $request->getParam('name');
+        $nickname = $request->getParam('nickname');
+        $password = $request->getParam('password');
+        $address = $request->getParam('address');
+        $uploadedFile = $request->getUploadedFiles()['photo'];
+        $directory = 'images';
+
+        (new User())->updateInfo($neighborId, $name, $nickname, $password, $address, $uploadedFile, $directory);
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the proper fields are in the request
+->add( new MultiPartValidateMiddleware([
+    'name' => 'required',
+    'nickname' => 'required',
+    'password' => '',
+    'address' => 'required',
+    'photo' => 'uploaded_file:0,1500K,png,jpeg'
+]) )
+// Make sure the body is multipart/form-data formatted
+->add( new MultiPartBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
 
 // Refresh friend list in redis
 $app->post('/v1/reloadfriends', function (Request $request, Response $response, array $args) {
     try {
         $neighborId = $request->getAttribute("neighborId");
         
-        $retval = (new User())->reloadFriends($neighborId);
+        (new User())->reloadFriends($neighborId);
         $response->getBody()->write('{ "result": "success" }');
         return $response;
     } catch (Exception $e) {
