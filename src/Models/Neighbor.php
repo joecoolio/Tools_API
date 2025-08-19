@@ -20,6 +20,7 @@ class Neighbor extends BaseModel {
             select
                 f.id,
                 f.name,
+                f.nickname,
                 f.photo_link,
                 f.home_address,
                 ST_Y(f.home_address_point::geometry) AS latitude,
@@ -41,10 +42,14 @@ class Neighbor extends BaseModel {
         $friends = json_decode($redis->get($redisFriendKey), true);
 
         // Tag as a friend or not
-        $neighbor['is_friend'] = array_key_exists($neighbor['id'], $friends);
-
-        // Add the friend level to the results by looking it up
-        $neighbor['depth'] = $friends[$neighbor['id']]['depth'];
+        if (array_key_exists($neighbor['id'], $friends)) {
+            $neighbor['is_friend'] = true;
+            $neighbor['depth'] = $friends[$neighbor['id']]['depth']; // Friend depth
+        } else {
+            $neighbor['is_friend'] = false;
+            $neighbor['name'] = $neighbor['nickname']; // Show nicknames on non-friends
+        }
+        unset($neighbor['nickname']); // Don't send the separate nickname
 
         return json_encode($neighbor );
     }
@@ -79,6 +84,7 @@ class Neighbor extends BaseModel {
             select
                 f.id,
                 f.name,
+                f.nickname,
                 f.photo_link,
                 f.home_address,
                 ST_Y(f.home_address_point::geometry) AS latitude,
@@ -111,6 +117,15 @@ class Neighbor extends BaseModel {
         // Tag each neighbor as a friend or not
         // Add the friend level to the results by looking it up
         foreach ($neighbors as &$neighbor) {
+            if (array_key_exists($neighbor['id'], $friends)) {
+                $neighbor['is_friend'] = true;
+                $neighbor['depth'] = $friends[$neighbor['id']]['depth']; // Friend depth
+            } else {
+                $neighbor['is_friend'] = false;
+                $neighbor['name'] = $neighbor['nickname']; // Show nicknames on non-friends
+            }
+            unset($neighbor['nickname']); // Don't send the separate nickname
+
             $neighbor['is_friend'] = in_array($neighbor['id'], $friendIds);
             if($neighbor['is_friend']) {
                 $neighbor['depth'] = $friends[$neighbor['id']]['depth'];

@@ -12,6 +12,9 @@ class User extends BaseModel {
 
         $sql = "
             select
+                userid,
+                name,
+                nickname,
                 home_address,
                 photo_link,
                 ST_Y(home_address_point::geometry) AS latitude,
