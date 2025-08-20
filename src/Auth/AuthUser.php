@@ -195,59 +195,5 @@ abstract class AuthUser {
             return [ "result" => LoginResult::UserDoesNotExist, "neighborId" => 0 ];
         }
     }
-    
-    
-
-    /** Create a new user with the given user & password.
-     * This does not check (or care) if the user already exists - do that beforehand.
-     */
-    protected function register(string $userid, string $name, string $address, string $password, string $ipaddress, bool $notifications_enabled = false) : int {
-        // Hash the password
-        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-
-        // If the user doesn't activate, the user will delete automatically
-        $now = (new \DateTimeImmutable());
-        $expires = $now->add(new \DateInterval("P2D"));  // 2 days
-
-        // Create the user record in the db
-        $pdo = Util::getDbConnection();
-        $stmt = $pdo->prepare("insert into neighbor (userid, name, home_address, password_hash, created, created_by_ip) values (:userid, :name, :address, :password_hash, :created, :created_by_ip)");
-        $stmt->execute(params: [
-            ':userid' => $userid,
-            ':name' => $name,
-            ':address' => $address,
-            ':password_hash' => $hashedPassword,
-            ':created' => $now->format(\DateTime::ISO8601),
-            ':created_by_ip' => $ipaddress
-        ]);
-        $neighborId = $pdo->lastInsertId();
-        
-        error_log("Created new user: $neighborId");
-
-        // Execute geocode lookup on the address
-        if (!$this->geocodeAddress($neighborId)) {
-            error_log("Failed to execute geo lookup for the address: $address");
-        }
-
-        return $neighborId;
-    }
-
-    // Do a geocode lookup of the address of a neighbor.
-    // Run this on register or whenever the address changes.
-    protected function geocodeAddress(int $neighborId) : bool {
-        $pdo = Util::getDbConnection();
-        $stmt = $pdo->prepare("
-            UPDATE neighbor
-                SET home_address_point = (
-                    SELECT ST_SetSRID(ST_SnapToGrid((g).geomout, 0.00001), 4326)
-                    FROM geocode(home_address, 1) AS g
-                )
-            WHERE
-                home_address IS NOT NULL
-                and id = :id
-        ");
-        $stmt->execute(params: [ ':id' => $neighborId ]);
-        return $stmt->rowCount() == 1;
-    }
 
 }

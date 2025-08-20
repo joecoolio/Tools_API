@@ -51,7 +51,25 @@ $app->add(new RKA\Middleware\IpAddress($checkProxyHeaders, $trustedProxies));
 /////
 
 // Register (user, pass) => (access token, refresh token) - same as login + create user
-$app->post('/v1/auth/register', [new AuthUserRegister(), 'process'])
+$app->post('/v1/auth/register', function (Request $request, Response $response, array $args) {
+    try {
+        $userid = $request->getParam('userid');
+        $password = $request->getParam('password');
+        $name = $request->getParam('name');
+        $nickname = $request->getParam('nickname');
+        $address = $request->getParam('address');
+        $uploadedFile = $request->getUploadedFiles()['photo'];
+        $directory = 'images';
+        $ipaddress = $request->getAttribute('ip_address');
+
+        $response = (new AuthUserRegister())->register($userid, $password, $name, $nickname, $address, $ipaddress, $uploadedFile, $directory, $response);
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
 // Add headers per RFC 6749
 ->add(
     function (Request $request, RequestHandler $handler) {
@@ -61,15 +79,17 @@ $app->post('/v1/auth/register', [new AuthUserRegister(), 'process'])
             ->withAddedHeader("Pragma", "no-cache");
     }
 )
-// Make sure the user/pass values are in the body JSON
-->add( new ValidateMiddleware([
+// Make sure the proper fields are in the request
+->add( new MultiPartValidateMiddleware([
     'userid' => 'required',
-    'name' => 'required',
     'password' => 'required',
-    'address' => 'required'
+    'name' => 'required',
+    'nickname' => 'required',
+    'address' => 'required',
+    'photo' => 'uploaded_file:0,1500K,png,jpeg'
 ]) )
-// Make sure the body is JSON formatted
-->add( new JSONBodyMiddleware() )
+// Make sure the body is multipart/form-data formatted
+->add( new MultiPartBodyMiddleware() )
 // Audit
 ->add( new AuditMiddleware() )
 // Non-mandatory auth

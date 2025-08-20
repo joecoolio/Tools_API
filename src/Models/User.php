@@ -213,12 +213,34 @@ class User extends BaseModel {
 
         // Run an update
         $pdo = Util::getDbConnection();
-        $sql =
-            "update neighbor set " . 
-            implode(', ', $kvs) . " " .
-            "where id = :neighborId";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($data);
+
+        $pdo->beginTransaction();
+        try {
+            $sql =
+                "update neighbor set " . 
+                implode(', ', $kvs) . " " .
+                "where id = :neighborId";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($data);
+
+            // Update the address point
+            $stmt = $pdo->prepare("
+                UPDATE neighbor
+                    SET home_address_point = (
+                        SELECT ST_SetSRID(ST_SnapToGrid((g).geomout, 0.00001), 4326)
+                        FROM geocode(home_address, 1) AS g
+                    )
+                WHERE
+                    home_address IS NOT NULL
+                    and id = :id
+            ");
+            $stmt->execute(params: [ ':id' => $neighborId ]);
+
+            $pdo->commit();
+        } catch (\PDOException $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
     }
 
 }
