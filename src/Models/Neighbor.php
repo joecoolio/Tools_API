@@ -57,20 +57,26 @@ class Neighbor extends BaseModel {
     public function getPhoto(string $photo_id, Response $response): Response {
         $dir = dirname(__DIR__) . "/../images/";
         $filename = $dir . $photo_id;
-        $ext = pathinfo($filename, PATHINFO_EXTENSION);
-        $mimetype = Util::getMimeType($ext);
-        $fh = fopen($filename, 'rb');
-        $stream = new Stream($fh);
 
-        return $response
-            ->withHeader('Content-Type', $mimetype)
-            ->withHeader('Content-Transfer-Encoding', 'Binary')
-            ->withHeader('Content-Disposition', 'attachment; filename="' . basename($filename) . '"')
-            ->withHeader('Content-Length', filesize($filename))
-            ->withHeader('Expires', '0')
-            ->withHeader('Cache-Control', 'must-revalidate, post-check=0, pre-check=0')
-            ->withHeader('Pragma', 'public')
-            ->withBody($stream);
+        if (file_exists($filename)) {
+            $ext = pathinfo($filename, PATHINFO_EXTENSION);
+            $mimetype = Util::getMimeType($ext);
+            $fh = fopen($filename, 'rb');
+            $stream = new Stream($fh);
+
+            return $response
+                ->withHeader('Content-Type', $mimetype)
+                ->withHeader('Content-Transfer-Encoding', 'Binary')
+                ->withHeader('Content-Disposition', 'attachment; filename="' . basename($filename) . '"')
+                ->withHeader('Content-Length', filesize($filename))
+                ->withHeader('Expires', '0')
+                ->withHeader('Cache-Control', 'must-revalidate, post-check=0, pre-check=0')
+                ->withHeader('Pragma', 'public')
+                ->withBody($stream);
+        } else {
+            $response->getBody()->write(json_encode("File does not exist: $photo_id"));
+            return $response->withStatus(404);
+        }
     }
 
     // Get all the neighbors and how far away each one is
