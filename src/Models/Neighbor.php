@@ -21,6 +21,7 @@ class Neighbor extends BaseModel {
                 f.id,
                 f.name,
                 f.nickname,
+                f.nickname,
                 f.photo_link,
                 f.home_address,
                 ST_Y(f.home_address_point::geometry) AS latitude,

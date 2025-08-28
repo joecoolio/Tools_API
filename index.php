@@ -211,7 +211,9 @@ $app->post('/v1/updateinfo', function (Request $request, Response $response, arr
         $nickname = $request->getParam('nickname');
         $password = $request->getParam('password');
         $address = $request->getParam('address');
-        $uploadedFile = $request->getUploadedFiles()['photo'];
+        // $uploadedFile = $request->getUploadedFiles()['photo'];
+        $uploadedFile = $request->getParam('photo');
+
         $directory = 'images';
 
         (new User())->updateInfo($neighborId, $name, $nickname, $password, $address, $uploadedFile, $directory);
@@ -444,6 +446,26 @@ $app->post('/v1/removefriendship', function (Request $request, Response $respons
 ;
 
 
+// List tool categories
+$app->post('/v1/gettoolcategories', function (Request $request, Response $response, array $args) {
+    try {
+        $retval = (new Tool())->getCategories();
+        return $response->withJson($retval);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+
 // List all of my tools
 $app->post('/v1/getmytools', function (Request $request, Response $response, array $args) {
     try {
@@ -465,6 +487,118 @@ $app->post('/v1/getmytools', function (Request $request, Response $response, arr
 // Time each request
 ->add( new TimerMiddleware() )
 ;
+
+
+
+// Create a new tool
+$app->post('/v1/createtool', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+
+        $shortName = $request->getParam('short_name');
+        $brand = $request->getParam('brand');
+        $name = $request->getParam('name');
+        $productUrl = $request->getParam('product_url');
+        $replacementCost = $request->getParam('replacement_cost');
+        $categoryId = $request->getParam('category');
+        // $uploadedFile = $request->getUploadedFiles()['photo'];
+        $uploadedFile = $request->getParam('photo');
+        $directory = 'images';
+
+        (new Tool())->createTool(
+            $neighborId,
+            $shortName,
+            $brand,
+            $name,
+            $productUrl,
+            $replacementCost,
+            $categoryId,
+            $uploadedFile,
+            $directory
+        );
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the proper fields are in the request
+->add( new MultiPartValidateMiddleware([
+    'short_name' => 'required',
+    'brand' => 'required',
+    'name' => 'required',
+    'product_url' => 'required',
+    'replacement_cost' => 'required|numeric',
+    'photo' => 'uploaded_file:0,1500K,png,jpeg'
+]) )
+// Make sure the body is multipart/form-data formatted
+->add( new MultiPartBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+
+
+// Update a tool
+$app->post('/v1/updatetool', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+
+        $toolId = $request->getParam('id');
+        $shortName = $request->getParam('short_name');
+        $brand = $request->getParam('brand');
+        $name = $request->getParam('name');
+        $productUrl = $request->getParam('product_url');
+        $replacementCost = $request->getParam('replacement_cost');
+        $categoryId = $request->getParam('category');
+        // $uploadedFile = $request->getUploadedFiles()['photo'];
+        $uploadedFile = $request->getParam('photo');
+        $directory = 'images';
+
+        (new Tool())->updateTool(
+            $toolId,
+            $neighborId,
+            $shortName,
+            $brand,
+            $name,
+            $productUrl,
+            $replacementCost,
+            $categoryId,
+            $uploadedFile,
+            $directory
+        );
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the proper fields are in the request
+->add( new MultiPartValidateMiddleware([
+    'id' => 'required|integer',
+    'short_name' => 'required',
+    'brand' => 'required',
+    'name' => 'required',
+    'product_url' => 'required',
+    'replacement_cost' => 'required|numeric',
+    'photo' => 'uploaded_file:0,1500K,png,jpeg'
+]) )
+// Make sure the body is multipart/form-data formatted
+->add( new MultiPartBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
 
 
 // List all tools available to me
