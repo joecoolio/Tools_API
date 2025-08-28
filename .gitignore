@@ -3,4 +3,5 @@ composer.lock
 jwt.pem
 jwt.pub
 vendor/
-images/
+images/*
+!images/default*.svg
