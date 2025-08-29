@@ -232,19 +232,34 @@ class Tool extends BaseModel {
         $placeholders = array_map(fn($f) => ":$f", $fields);
         // $kvs = array_map(fn($f) => "$f = :$f", $fields);
 
-        // Run an update
         $pdo = Util::getDbConnection();
 
-        $sql =
-            "insert into tool(" .
-            implode(', ', $fields) . ") " .
-            "values (" . 
-            implode(', ', $placeholders) . ") " .
-            "returning id";
+        $pdo->beginTransaction();
+        try {
+            // Create the new tool
+            $sql =
+                "insert into tool(" .
+                implode(', ', $fields) . ") " .
+                "values (" . 
+                implode(', ', $placeholders) . ") " .
+                "returning id";
 
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($data);
-        // $toolId = $stmt->fetchColumn();
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($data);
+            // $toolId = $stmt->fetchColumn();
+
+            // Update the owner's tool count
+            $sql =
+                "update neighbor set tool_count = tool_count + 1 " .
+                "where id = :neighborId";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([ ':neighborId' => $neighborId ]);
+
+            $pdo->commit();
+        } catch (\PDOException $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
     }
 
 }

@@ -131,6 +131,7 @@ class User extends BaseModel {
                 f.name,
                 f.home_address,
                 f.photo_link,
+                f.tool_count,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m

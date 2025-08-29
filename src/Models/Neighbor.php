@@ -24,6 +24,7 @@ class Neighbor extends BaseModel {
                 f.nickname,
                 f.photo_link,
                 f.home_address,
+                f.tool_count,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
@@ -49,6 +50,7 @@ class Neighbor extends BaseModel {
         } else {
             $neighbor['is_friend'] = false;
             $neighbor['name'] = $neighbor['nickname']; // Show nicknames on non-friends
+            $neighbor['tool_count'] = 0; // Do not show tool count for non-friends
         }
         unset($neighbor['nickname']); // Don't send the separate nickname
 
@@ -94,6 +96,7 @@ class Neighbor extends BaseModel {
                 f.nickname,
                 f.photo_link,
                 f.home_address,
+                f.tool_count,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
@@ -130,13 +133,9 @@ class Neighbor extends BaseModel {
             } else {
                 $neighbor['is_friend'] = false;
                 $neighbor['name'] = $neighbor['nickname']; // Show nicknames on non-friends
+                $neighbor['tool_count'] = 0; // Do not show tool count for non-friends
             }
             unset($neighbor['nickname']); // Don't send the separate nickname
-
-            $neighbor['is_friend'] = in_array($neighbor['id'], $friendIds);
-            if($neighbor['is_friend']) {
-                $neighbor['depth'] = $friends[$neighbor['id']]['depth'];
-            }
         }
 
         return json_encode($neighbors );
