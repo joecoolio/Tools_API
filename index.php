@@ -26,6 +26,7 @@ use App\Models\Neighbor;
 use App\Models\Tool;
 use App\Models\User;
 use App\Models\File;
+use App\Models\PushNotification;
 
 require 'vendor/autoload.php';
 
@@ -385,14 +386,15 @@ $app->post('/v1/getImage', function (Request $request, Response $response, array
 ->add( new TimerMiddleware() )
 ;
 
-// Create a friendship
-$app->post('/v1/addfriendship', function (Request $request, Response $response, array $args) {
+// Create a friendship request
+$app->post('/v1/requestfriendship', function (Request $request, Response $response, array $args) {
     try {
         $myNeighborId = $request->getAttribute("neighborId");
         $bodyArray = $request->getParsedBody();
         $neighborId = $bodyArray["neighborId"];
+        $message = $bodyArray["message"];
 
-        (new Neighbor())->addFriendship($myNeighborId, $neighborId);
+        (new Neighbor())->requestFriendship($myNeighborId, $neighborId, $message);
         $response->getBody()->write('{ "result": "success" }');
         return $response;
     } catch (Exception $e) {
@@ -403,7 +405,38 @@ $app->post('/v1/addfriendship', function (Request $request, Response $response, 
 })
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
-    'neighborId' => 'required|integer'
+    'neighborId' => 'required|integer',
+    'message' => 'required'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Delete a friendship request
+$app->post('/v1/deletefriendshiprequest', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $neighborId = $bodyArray["neighborId"];
+
+        (new Neighbor())->deleteFriendshipRequest($myNeighborId, $neighborId);
+        $response->getBody()->write('{ "result": "success" }');
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'neighborId' => 'required|integer',
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
@@ -654,6 +687,22 @@ $app->post('/v1/gettool', function (Request $request, Response $response, array 
 ->add( new TimerMiddleware() )
 ;
 
+
+// Test push notification
+$app->post('/v1/testpush', function (Request $request, Response $response, array $args) {
+    try {
+        (new PushNotification())->sendWebPush();
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+error_log($e);
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Time each request
+->add( new TimerMiddleware() )
+;
 
 
 

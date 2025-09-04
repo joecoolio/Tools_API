@@ -21,16 +21,20 @@ class Neighbor extends BaseModel {
                 f.id,
                 f.name,
                 f.nickname,
-                f.nickname,
                 f.photo_link,
                 f.home_address,
                 f.tool_count,
+                case when fr.neighbor_id is not null then true else false end friendship_requested,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
             from
-                neighbor f,
-                me
+                neighbor f
+                inner join me
+                    on 1=1
+                left outer join friendship_request fr
+                    on me.id = fr.neighbor_id
+                    and f.id = fr.friend_id
             where
                 f.id = :neighborId
         ');
@@ -97,6 +101,7 @@ class Neighbor extends BaseModel {
                 f.photo_link,
                 f.home_address,
                 f.tool_count,
+                case when fr.neighbor_id is not null then true else false end friendship_requested,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
@@ -104,6 +109,9 @@ class Neighbor extends BaseModel {
                 neighbor f
                 inner join me
                     on f.id != me.id
+                left outer join friendship_request fr
+                    on me.id = fr.neighbor_id
+                    and f.id = fr.friend_id
             where
                 ST_DWithin(
                     f.home_address_point,
@@ -141,14 +149,45 @@ class Neighbor extends BaseModel {
         return json_encode($neighbors );
     }
 
-    // Create a friendship between 2 users.
+    // Create a friendship request between 2 users.
     // This is a one-way friendship, it does not add it two-ways.
-    public function addFriendship(int $sourceNeighborId, int $targetNeighborId): void {
+    public function requestFriendship(int $sourceNeighborId, int $targetNeighborId, string $message): void {
         $pdo = Util::getDbConnection();
+
+        // If you're already friends, do nothing
+
+        // Get friends from redis
+        $redis = Util::getRedisConnection();
+        $redisFriendKey = "$sourceNeighborId-friends";
+        $friends = json_decode($redis->get($redisFriendKey), true);
+        // Filter friends by the requested ID + depth = 1 (direct friends)
+        $friends = array_filter($friends, fn($item) => $item['friend_id'] == $targetNeighborId && $item['depth'] == 1);
+        // If any friends left, that means you're already friends so do nothing.
+        if (count($friends) > 0)
+            return;
+
+        // Create the request.  If there's already a request, just do nothing.
         $stmt = $pdo->prepare("            
-            insert into friendship (neighbor_id, friend_id)
-            values (:source, :target)
+            insert into friendship_request (neighbor_id, friend_id, message)
+            values (:source, :target, :message)
             on conflict do nothing
+        ");
+        $stmt->execute(params: [
+            ":source" => $sourceNeighborId,
+            ":target" => $targetNeighborId,
+            ":message" => $message
+        ]);
+    }
+
+    // Delete an existing friendship request.
+    public function deleteFriendshipRequest(int $sourceNeighborId, int $targetNeighborId): void {
+        $pdo = Util::getDbConnection();
+
+        // Delete the request
+        $stmt = $pdo->prepare("            
+            delete from friendship_request
+            where neighbor_id = :source
+            and friend_id = :target
         ");
         $stmt->execute(params: [
             ":source" => $sourceNeighborId,
