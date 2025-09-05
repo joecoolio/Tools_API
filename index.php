@@ -243,7 +243,6 @@ $app->post('/v1/updateinfo', function (Request $request, Response $response, arr
 ->add( new TimerMiddleware() )
 ;
 
-
 // Refresh friend list in redis
 $app->post('/v1/reloadfriends', function (Request $request, Response $response, array $args) {
     try {
@@ -478,7 +477,6 @@ $app->post('/v1/removefriendship', function (Request $request, Response $respons
 ->add( new TimerMiddleware() )
 ;
 
-
 // List tool categories
 $app->post('/v1/gettoolcategories', function (Request $request, Response $response, array $args) {
     try {
@@ -497,7 +495,6 @@ $app->post('/v1/gettoolcategories', function (Request $request, Response $respon
 // Time each request
 ->add( new TimerMiddleware() )
 ;
-
 
 // List all of my tools
 $app->post('/v1/getmytools', function (Request $request, Response $response, array $args) {
@@ -520,8 +517,6 @@ $app->post('/v1/getmytools', function (Request $request, Response $response, arr
 // Time each request
 ->add( new TimerMiddleware() )
 ;
-
-
 
 // Create a new tool
 $app->post('/v1/createtool', function (Request $request, Response $response, array $args) {
@@ -574,8 +569,6 @@ $app->post('/v1/createtool', function (Request $request, Response $response, arr
 // Time each request
 ->add( new TimerMiddleware() )
 ;
-
-
 
 // Update a tool
 $app->post('/v1/updatetool', function (Request $request, Response $response, array $args) {
@@ -632,8 +625,6 @@ $app->post('/v1/updatetool', function (Request $request, Response $response, arr
 ->add( new TimerMiddleware() )
 ;
 
-
-
 // List all tools available to me
 $app->post('/v1/getalltools', function (Request $request, Response $response, array $args) {
     try {
@@ -686,6 +677,59 @@ $app->post('/v1/gettool', function (Request $request, Response $response, array 
 // Time each request
 ->add( new TimerMiddleware() )
 ;
+
+// Get all notifications
+$app->post('/v1/getnotifications', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+        
+        $retval = (new User())->listNotifications($neighborId);
+        return $response->withJson($retval);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Resolve a notification
+$app->post('/v1/resolvenotification', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+        
+        $bodyArray = $request->getParsedBody();
+        $notificationId = $bodyArray["id"];
+        
+        (new User())->resolveNotifications($notificationId);
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'id' => 'required|integer'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+
 
 
 // Test push notification

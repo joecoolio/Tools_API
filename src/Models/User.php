@@ -244,4 +244,40 @@ class User extends BaseModel {
         }
     }
 
+    // Get all notifications
+    public function listNotifications(int $neighborId): array {
+        $pdo = Util::getDbConnection();
+        $stmt = $pdo->prepare('
+            select
+                id,
+                from_neighbor,
+                type,
+                message,
+                created_ts
+            from
+                notification
+            where
+                to_neighbor = :neighborId
+                and resolved = false
+        ');
+        $stmt->execute(params: [
+            ':neighborId' => $neighborId,
+        ]);
+        $reqs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return $reqs;
+    }
+
+    // Resolve a notification
+    public function resolveNotifications(int $notificationId): void {
+        $pdo = Util::getDbConnection();
+        $stmt = $pdo->prepare('
+            update notification
+            set resolved = true, resolution_ts = now()
+            where id = :notificationId
+        ');
+        $stmt->execute(params: [
+            ':notificationId' => $notificationId,
+        ]);
+    }
 }
