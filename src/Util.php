@@ -42,12 +42,96 @@ abstract class Util {
         return $pdo;
     }
 
-    public static function getRedisConnection() : Client {
+    private static function getRedisConnection() : Client {
         $redis = new Client([
             'host' => $_ENV['REDIS_HOST'],
             'port' => $_ENV['REDIS_PORT']
         ]);
         return $redis;
+    }
+
+    // Get friends for a user filtered to a maximum depth.
+    // If the friends are in redis already, just return those.
+    // If the friends have not been loaded (or have been expired), reload
+    // from the database and store in redis.
+    // Return friends that are <= $level.
+    public static function getFriends(int $neighborId, int $level = 999): array {
+        $friends = null;
+        $redisFriendKey = "$neighborId-friends";
+
+        // First check redis, if friends are there, return them.
+        $redis = Util::getRedisConnection();
+        if ($redis->exists($redisFriendKey)) {
+            // Friends are in redis, just use that
+            $friends = json_decode($redis->get($redisFriendKey), true);
+        } else {
+            // Friends are not in redis, reload from the database
+            $pdo = Util::getDbConnection();
+            $sql = "
+                WITH RECURSIVE friend_of_friend AS (
+                    SELECT friend_id, ARRAY[]::integer[] via, 1 depth
+                    FROM friendship
+                    WHERE neighbor_id = :neighborId
+                    
+                    UNION
+                    
+                    SELECT f.friend_id, fof.via || f.neighbor_id via, fof.depth + 1 depth
+                    FROM friendship f
+                    JOIN friend_of_friend fof
+                        ON f.neighbor_id = fof.friend_id
+                    where 
+                        f.friend_id != :neighborId
+                        and fof.depth < 10
+                ), numbered as (
+                    select
+                        fof.*,
+                        row_number() over (partition by fof.friend_id order by depth) rn
+                    from
+                        friend_of_friend fof
+                ), me as (
+                    select id, home_address_point from neighbor where id = :neighborId
+                )
+                select
+                    nf.friend_id,
+                    nf.via,
+                    nf.depth,
+                    ST_Distance(me.home_address_point, f.home_address_point) distance_m
+                from
+                    numbered nf
+                    inner join neighbor f
+                        on nf.friend_id = f.id
+                    inner join me 
+                        on 1=1
+                where rn = 1
+            ";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute(params: [
+                ':neighborId' => $neighborId,
+            ]);
+            $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Store friends to redis
+            // Store friends as {id: <friend>} in an associative array
+            $assocArray = [];
+            foreach ($friends as $friend) {
+                if (isset($friend['friend_id'])) {
+                    $assocArray[$friend['friend_id']] = $friend;
+                }
+            }
+            $redis->set($redisFriendKey, json_encode($assocArray));
+        }
+
+        // Filter friends by level (depth <= $level)
+        return array_filter($friends, fn($friend) => $friend['depth'] <= $level);
+    }
+
+    // Remove the friends for a user from redis.
+    // The next time getFriends() is called, it will requery & reload redis.
+    public static function expireFriends(int $neighborId): void {
+        // Remove the item from redis
+        $redis = Util::getRedisConnection();
+        $redisFriendKey = "$neighborId-friends";
+        $redis->del($redisFriendKey);
     }
 
     // Find $ext extension in the mime_types array

@@ -22,6 +22,7 @@ use App\Auth\AuthUserRegister;
 use App\Auth\AuthRefreshToken;
 
 // // User clases
+use App\Util;
 use App\Models\Neighbor;
 use App\Models\Tool;
 use App\Models\User;
@@ -243,14 +244,14 @@ $app->post('/v1/updateinfo', function (Request $request, Response $response, arr
 ->add( new TimerMiddleware() )
 ;
 
-// Refresh friend list in redis
-$app->post('/v1/reloadfriends', function (Request $request, Response $response, array $args) {
+// Discard stored friend list in redis.
+// The next call to /friends will reload from the db.
+$app->post('/v1/expirefriends', function (Request $request, Response $response, array $args) {
     try {
         $neighborId = $request->getAttribute("neighborId");
         
-        (new User())->reloadFriends($neighborId);
-        $response->getBody()->write('{ "result": "success" }');
-        return $response;
+        Util::expireFriends($neighborId);
+        return $response->withJson(data: [ "result" => "success" ]);
     } catch (Exception $e) {
         $badresponse = new \GuzzleHttp\Psr7\Response();
         $badresponse->getBody()->write(json_encode($e->getMessage()));
@@ -265,7 +266,7 @@ $app->post('/v1/reloadfriends', function (Request $request, Response $response, 
 ->add( new TimerMiddleware() )
 ;
 
-// Get all of my friends (using the cached list)
+// Get all of my friends.
 $app->post('/v1/friends', function (Request $request, Response $response, array $args) {
     try {
         $neighborId = $request->getAttribute("neighborId");
@@ -417,6 +418,37 @@ $app->post('/v1/requestfriendship', function (Request $request, Response $respon
 ->add( new TimerMiddleware() )
 ;
 
+// Create a friendship / accept a request
+$app->post('/v1/createfriendship', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $neighborId = $bodyArray["neighborId"];
+
+        // I am the target, the other neighbor is the source
+        (new User())->createFriendship($myNeighborId, $neighborId);
+        $response->getBody()->write('{ "result": "success" }');
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'neighborId' => 'required|integer'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
 // Delete a friendship request
 $app->post('/v1/deletefriendshiprequest', function (Request $request, Response $response, array $args) {
     try {
@@ -454,7 +486,7 @@ $app->post('/v1/removefriendship', function (Request $request, Response $respons
         $bodyArray = $request->getParsedBody();
         $neighborId = $bodyArray["neighborId"];
 
-        (new Neighbor())->removeFriendship($myNeighborId, $neighborId);
+        (new User())->removeFriendship($myNeighborId, $neighborId);
         $response->getBody()->write('{ "result": "success" }');
         return $response;
     } catch (Exception $e) {
@@ -544,7 +576,7 @@ $app->post('/v1/createtool', function (Request $request, Response $response, arr
             $uploadedFile,
             $directory
         );
-        return $response->withJson([ "result" => "success" ]);
+        return $response->withJson(data: [ "result" => "success" ]);
     } catch (Exception $e) {
         $badresponse = new \GuzzleHttp\Psr7\Response();
         $badresponse->getBody()->write(json_encode($e->getMessage()));
@@ -631,8 +663,7 @@ $app->post('/v1/getalltools', function (Request $request, Response $response, ar
         $neighborId = $request->getAttribute("neighborId");
         
         $retval = (new Tool())->listAllTools($neighborId);
-        $response->getBody()->write($retval);
-        return $response;
+        return $response->withJson($retval);
     } catch (Exception $e) {
         $badresponse = new \GuzzleHttp\Psr7\Response();
         $badresponse->getBody()->write(json_encode($e->getMessage()));

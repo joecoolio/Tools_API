@@ -24,7 +24,7 @@ class Neighbor extends BaseModel {
                 f.photo_link,
                 f.home_address,
                 f.tool_count,
-                case when fr.neighbor_id is not null then true else false end friendship_requested,
+                case when n.from_neighbor is not null then true else false end friendship_requested,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
@@ -32,9 +32,11 @@ class Neighbor extends BaseModel {
                 neighbor f
                 inner join me
                     on 1=1
-                left outer join friendship_request fr
-                    on me.id = fr.neighbor_id
-                    and f.id = fr.friend_id
+                left outer join notification n
+                    on me.id = n.from_neighbor 
+                    and f.id = n.to_neighbor
+                    and n.type = \'friend_request\'
+                    and n.resolved = false
             where
                 f.id = :neighborId
         ');
@@ -42,10 +44,8 @@ class Neighbor extends BaseModel {
         $stmt->execute(params: [ ':neighborId' => $neighborId, ':myNeighborId' => $myNeighborId ]);
         $neighbor = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        // Get friends from redis
-        $redis = Util::getRedisConnection();
-        $redisFriendKey = "$myNeighborId-friends";
-        $friends = json_decode($redis->get($redisFriendKey), true);
+        // Get friends (any depth)
+        $friends = Util::getFriends($myNeighborId);
 
         // Tag as a friend or not
         if (array_key_exists($neighbor['id'], $friends)) {
@@ -101,7 +101,7 @@ class Neighbor extends BaseModel {
                 f.photo_link,
                 f.home_address,
                 f.tool_count,
-                case when fr.neighbor_id is not null then true else false end friendship_requested,
+                case when n.from_neighbor is not null then true else false end friendship_requested,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
@@ -109,9 +109,11 @@ class Neighbor extends BaseModel {
                 neighbor f
                 inner join me
                     on f.id != me.id
-                left outer join friendship_request fr
-                    on me.id = fr.neighbor_id
-                    and f.id = fr.friend_id
+                left outer join notification n
+                    on me.id = n.from_neighbor 
+                    and f.id = n.to_neighbor
+                    and n.type = \'friend_request\'
+                    and n.resolved = false
             where
                 ST_DWithin(
                     f.home_address_point,
@@ -125,12 +127,8 @@ class Neighbor extends BaseModel {
         ]);
         $neighbors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Get friends from redis
-        $redis = Util::getRedisConnection();
-        $redisFriendKey = "$neighborId-friends";
-        $friends = json_decode($redis->get($redisFriendKey), true);
-        // Get all the friend IDs as an array
-        $friendIds = array_column($friends, "friend_id");
+        // Get friends (any depth)
+        $friends = Util::getFriends($neighborId);
 
         // Tag each neighbor as a friend or not
         // Add the friend level to the results by looking it up
@@ -156,21 +154,18 @@ class Neighbor extends BaseModel {
 
         // If you're already friends, do nothing
 
-        // Get friends from redis
-        $redis = Util::getRedisConnection();
-        $redisFriendKey = "$sourceNeighborId-friends";
-        $friends = json_decode($redis->get($redisFriendKey), true);
-        // Filter friends by the requested ID + depth = 1 (direct friends)
-        $friends = array_filter($friends, fn($item) => $item['friend_id'] == $targetNeighborId && $item['depth'] == 1);
+        // Get 1-depth friends
+        $friends = Util::getFriends($sourceNeighborId, 1);
+        // Filter friends by the requested ID
+        $friends = array_filter($friends, fn($item) => $item['friend_id'] == $targetNeighborId);
         // If any friends left, that means you're already friends so do nothing.
         if (count($friends) > 0)
             return;
 
-        // Create the request.  If there's already a request, just do nothing.
-        $stmt = $pdo->prepare("            
-            insert into friendship_request (neighbor_id, friend_id, message)
-            values (:source, :target, :message)
-            on conflict do nothing
+        // Create the request in the notification table.  If there's already a request, just do nothing.
+        $stmt = $pdo->prepare("
+            insert into notification (to_neighbor, from_neighbor, type, message)
+            values (:target, :source, 'friend_request', :message)
         ");
         $stmt->execute(params: [
             ":source" => $sourceNeighborId,
@@ -184,24 +179,11 @@ class Neighbor extends BaseModel {
         $pdo = Util::getDbConnection();
 
         // Delete the request
-        $stmt = $pdo->prepare("            
-            delete from friendship_request
-            where neighbor_id = :source
-            and friend_id = :target
-        ");
-        $stmt->execute(params: [
-            ":source" => $sourceNeighborId,
-            ":target" => $targetNeighborId
-        ]);
-    }
-
-    // Delete a friendship between 2 users.
-    public function removeFriendship(int $sourceNeighborId, int $targetNeighborId): void {
-        $pdo = Util::getDbConnection();
         $stmt = $pdo->prepare("
-            delete from friendship
-            where neighbor_id = :source
-            and friend_id = :target
+            delete from notification
+            where from_neighbot = :source
+            and to_neighbor = :target
+            and type = 'friend_request'
         ");
         $stmt->execute(params: [
             ":source" => $sourceNeighborId,

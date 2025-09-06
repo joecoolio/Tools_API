@@ -4,6 +4,7 @@ namespace App\Models;
 
 use \PDO;
 use \App\Util;
+use SpomkyLabs\Pki\ASN1\Component\Length;
 
 class Tool extends BaseModel {
     // Get all the tools that I currently own
@@ -36,60 +37,59 @@ class Tool extends BaseModel {
     }
 
     // Get all the tools available to a neighbor
-    // This gets the list of friends from redis and filters based on that
-    public function listAllTools(int $neighborId): string {
-        $redis = Util::getRedisConnection();
-        $redisFriendKey = "$neighborId-friends";
+    // This gets the list of friends and filters based on that
+    public function listAllTools(int $neighborId): array {
+        // Get friends
+        $friends = Util::getFriends($neighborId);
 
-        if ($redis->exists($redisFriendKey)) {
-            // Get friends from redis
-            $friends = json_decode($redis->get($redisFriendKey), true);
-            // Get all the friend IDs as an array
-            $neighborIds = array_column($friends,"friend_id");
-
-            $pdo = Util::getDbConnection();
-            $sql = "
-                with me as (
-                    select id, home_address_point from neighbor where id = :neighborId
-                )
-                select
-                    t.id,
-                    t.owner_id,
-                    t.short_name,
-                    t.brand,
-                    t.name,
-                    t.product_url,
-                    t.replacement_cost,
-                    c.id category_id,
-                    c.name category,
-                    c.icon category_icon,
-                    t.photo_link,
-                    ST_Y(f.home_address_point::geometry) AS latitude,
-                    ST_X(f.home_address_point::geometry) AS longitude,
-                    ST_Distance(me.home_address_point, f.home_address_point) distance_m
-                from
-                    tool t
-                    inner join tool_category c
-                    	on t.category = c.id
-                    inner join neighbor f
-                        on t.owner_id = f.id
-                    inner join me
-                        on f.id != me.id
-                where t.owner_id = any(:friendIds)
-            ";
-            $stmt = $pdo->prepare($sql);
-            $pgArrayString = '{' . implode(',', $neighborIds) . '}';
-
-            $stmt->execute(params: [
-                ':neighborId' => $neighborId,
-                ':friendIds' => $pgArrayString ]
-            );
-            $tools = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            return json_encode($tools );
-        } else {
-            return json_encode([]);
+        // If no friends, no tools :(
+        if (count($friends) == 0) {
+            return [];
         }
+
+        // Get all the friend IDs as an array
+        $neighborIds = array_column($friends,"friend_id");
+        $neighborIdsArrayString = '{' . implode(',', $neighborIds) . '}';
+
+        $pdo = Util::getDbConnection();
+        $sql = "
+            with me as (
+                select id, home_address_point from neighbor where id = :neighborId
+            )
+            select
+                t.id,
+                t.owner_id,
+                t.short_name,
+                t.brand,
+                t.name,
+                t.product_url,
+                t.replacement_cost,
+                c.id category_id,
+                c.name category,
+                c.icon category_icon,
+                t.photo_link,
+                ST_Y(f.home_address_point::geometry) AS latitude,
+                ST_X(f.home_address_point::geometry) AS longitude,
+                ST_Distance(me.home_address_point, f.home_address_point) distance_m
+            from
+                tool t
+                inner join tool_category c
+                    on t.category = c.id
+                inner join neighbor f
+                    on t.owner_id = f.id
+                inner join me
+                    on f.id != me.id
+            where t.owner_id = any(:friendIds)
+        ";
+        $stmt = $pdo->prepare($sql);
+
+        $stmt->execute(params: [
+            ':neighborId' => $neighborId,
+            ':friendIds' => $neighborIdsArrayString ]
+        );
+        $tools = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return $tools;
     }
 
     // Get info about a single tool

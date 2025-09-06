@@ -195,5 +195,4 @@ abstract class AuthUser {
             return [ "result" => LoginResult::UserDoesNotExist, "neighborId" => 0 ];
         }
     }
-
 }
