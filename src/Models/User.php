@@ -231,7 +231,7 @@ class User extends BaseModel {
         ]);
 
         // The other guy's friends have now changed, drop them from redis.
-        $this->reloadFriends($otherNeighborId);
+        Util::expireFriends($otherNeighborId);
     }
 
     // Delete a friendship between 2 users.
