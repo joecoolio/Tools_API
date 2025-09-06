@@ -181,7 +181,7 @@ class Neighbor extends BaseModel {
         // Delete the request
         $stmt = $pdo->prepare("
             delete from notification
-            where from_neighbot = :source
+            where from_neighbor = :source
             and to_neighbor = :target
             and type = 'friend_request'
         ");
