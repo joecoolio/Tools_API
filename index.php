@@ -213,11 +213,13 @@ $app->post('/v1/updateinfo', function (Request $request, Response $response, arr
         $nickname = $request->getParam('nickname');
         $password = $request->getParam('password');
         $address = $request->getParam('address');
-        // $uploadedFile = $request->getUploadedFiles()['photo'];
         $uploadedFile = $request->getParam('photo');
 
         $directory = 'images';
 
+        // Handle no photo upload
+        if ($uploadedFile == "null") $uploadedFile = null;
+        
         (new User())->updateInfo($neighborId, $name, $nickname, $password, $address, $uploadedFile, $directory);
         return $response->withJson([ "result" => "success" ]);
     } catch (Exception $e) {
