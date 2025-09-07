@@ -74,6 +74,7 @@ class User extends BaseModel {
 
         // Add the friend level to the results by looking it up
         foreach ($neighbors as &$neighbor) {
+            $neighbor['is_friend'] = true; // Everyone here is your friend
             $friend = array_find($friends, fn($n) => $n['friend_id'] == $neighbor['id']);
             $neighbor['depth'] = $friend['depth'];
         }
