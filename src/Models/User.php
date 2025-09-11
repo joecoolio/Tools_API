@@ -17,6 +17,8 @@ class User extends BaseModel {
                 nickname,
                 home_address,
                 photo_link,
+                phone_number,
+                email,
                 ST_Y(home_address_point::geometry) AS latitude,
                 ST_X(home_address_point::geometry) AS longitude	
             from neighbor
@@ -174,6 +176,7 @@ class User extends BaseModel {
                 from_neighbor,
                 type,
                 message,
+                data,
                 created_ts
             from
                 notification
@@ -202,7 +205,7 @@ class User extends BaseModel {
         ]);
     }
 
-        // Create a friendship.
+    // Create a friendship.
     // A user can only create friendships to them, not from (those go as requests).
     // So, the other guy is the source and I am the target.
     public function createFriendship(int $myNeighborId, int $otherNeighborId): void {

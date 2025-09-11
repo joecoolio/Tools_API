@@ -68,6 +68,7 @@ class Neighbor extends BaseModel {
         if (file_exists($filename)) {
             $ext = pathinfo($filename, PATHINFO_EXTENSION);
             $mimetype = Util::getMimeType($ext);
+            $lastModifiedTimestamp = filemtime($filename);
             $fh = fopen($filename, 'rb');
             $stream = new Stream($fh);
 
@@ -76,8 +77,9 @@ class Neighbor extends BaseModel {
                 ->withHeader('Content-Transfer-Encoding', 'Binary')
                 ->withHeader('Content-Disposition', 'attachment; filename="' . basename($filename) . '"')
                 ->withHeader('Content-Length', filesize($filename))
+                ->withHeader('Last-Modified', gmdate('D, d M Y H:i:s T', $lastModifiedTimestamp))
                 ->withHeader('Expires', '0')
-                ->withHeader('Cache-Control', 'must-revalidate, post-check=0, pre-check=0')
+                ->withHeader('Cache-Control', 'public, max-age=86400')
                 ->withHeader('Pragma', 'public')
                 ->withBody($stream);
         } else {
@@ -87,7 +89,7 @@ class Neighbor extends BaseModel {
     }
 
     // Get all the neighbors and how far away each one is
-    public function listAllNeighbors(int $neighborId, int $radius_miles = 9999): string {
+    public function listAllNeighbors(int $neighborId, float $radius_miles = 9999): string {
         $pdo = Util::getDbConnection();
         $stmt = $pdo->prepare('
             with me as (

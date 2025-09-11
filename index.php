@@ -219,7 +219,7 @@ $app->post('/v1/updateinfo', function (Request $request, Response $response, arr
 
         // Handle no photo upload
         if ($uploadedFile == "null") $uploadedFile = null;
-        
+
         (new User())->updateInfo($neighborId, $name, $nickname, $password, $address, $uploadedFile, $directory);
         return $response->withJson([ "result" => "success" ]);
     } catch (Exception $e) {
@@ -298,12 +298,17 @@ $app->post('/v1/friends', function (Request $request, Response $response, array 
 ->add( new TimerMiddleware() )
 ;
 
+
+/////
+// Neighbors
+/////
+
+
 // Get all neighbors
 $app->post('/v1/getneighbors', function (Request $request, Response $response, array $args) {
     try {
         $neighborId = $request->getAttribute("neighborId");
         $bodyArray = $request->getParsedBody();
-        $radiusMiles = 9999; //default infinity
         $radiusMiles = $bodyArray["radius_miles"];
         
         $retval = (new Neighbor())->listAllNeighbors($neighborId, $radiusMiles);
@@ -420,6 +425,42 @@ $app->post('/v1/requestfriendship', function (Request $request, Response $respon
 ->add( new TimerMiddleware() )
 ;
 
+// Delete a friendship request
+$app->post('/v1/deletefriendshiprequest', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $neighborId = $bodyArray["neighborId"];
+
+        (new Neighbor())->deleteFriendshipRequest($myNeighborId, $neighborId);
+        $response->getBody()->write('{ "result": "success" }');
+        return $response;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'neighborId' => 'required|integer',
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+
+/////
+// Manage friends
+/////
+
+
 // Create a friendship / accept a request
 $app->post('/v1/createfriendship', function (Request $request, Response $response, array $args) {
     try {
@@ -440,36 +481,6 @@ $app->post('/v1/createfriendship', function (Request $request, Response $respons
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
     'neighborId' => 'required|integer'
-]) )
-// Make sure the body is JSON formatted
-->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
-// Mandatory auth
-->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
-;
-
-// Delete a friendship request
-$app->post('/v1/deletefriendshiprequest', function (Request $request, Response $response, array $args) {
-    try {
-        $myNeighborId = $request->getAttribute("neighborId");
-        $bodyArray = $request->getParsedBody();
-        $neighborId = $bodyArray["neighborId"];
-
-        (new Neighbor())->deleteFriendshipRequest($myNeighborId, $neighborId);
-        $response->getBody()->write('{ "result": "success" }');
-        return $response;
-    } catch (Exception $e) {
-        $badresponse = new \GuzzleHttp\Psr7\Response();
-        $badresponse->getBody()->write(json_encode($e->getMessage()));
-        return $badresponse->withStatus(500);
-    }
-})
-// Make sure the id is in the body
-->add( new ValidateMiddleware([
-    'neighborId' => 'required|integer',
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
@@ -510,6 +521,12 @@ $app->post('/v1/removefriendship', function (Request $request, Response $respons
 // Time each request
 ->add( new TimerMiddleware() )
 ;
+
+
+/////
+// Manage my tools
+/////
+
 
 // List tool categories
 $app->post('/v1/gettoolcategories', function (Request $request, Response $response, array $args) {
@@ -659,12 +676,20 @@ $app->post('/v1/updatetool', function (Request $request, Response $response, arr
 ->add( new TimerMiddleware() )
 ;
 
+
+/////
+// Tools
+/////
+
+
 // List all tools available to me
 $app->post('/v1/getalltools', function (Request $request, Response $response, array $args) {
     try {
         $neighborId = $request->getAttribute("neighborId");
-        
-        $retval = (new Tool())->listAllTools($neighborId);
+        $bodyArray = $request->getParsedBody();
+        $radiusMiles = $bodyArray["radius_miles"];
+
+        $retval = (new Tool())->listAllTools($neighborId, $radiusMiles);
         return $response->withJson($retval);
     } catch (Exception $e) {
         $badresponse = new \GuzzleHttp\Psr7\Response();
@@ -672,6 +697,10 @@ $app->post('/v1/getalltools', function (Request $request, Response $response, ar
         return $badresponse->withStatus(500);
     }
 })
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'radius_miles' => 'required|numeric'
+]) )
 // Audit
 ->add( new AuditMiddleware() )
 // Mandatory auth
@@ -689,8 +718,7 @@ $app->post('/v1/gettool', function (Request $request, Response $response, array 
         $toolId = $bodyArray["id"];
         
         $retval = (new Tool())->getTool($toolId, $neighborId);
-        $response->getBody()->write($retval);
-        return $response;
+        return $response->withJson($retval);
     } catch (Exception $e) {
         $badresponse = new \GuzzleHttp\Psr7\Response();
         $badresponse->getBody()->write(json_encode($e->getMessage()));
@@ -710,6 +738,136 @@ $app->post('/v1/gettool', function (Request $request, Response $response, array 
 // Time each request
 ->add( new TimerMiddleware() )
 ;
+
+// Create a tool borrow request
+$app->post('/v1/requestborrow', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $toolId = $bodyArray["toolId"];
+        $message = $bodyArray["message"];
+
+        (new Tool())->requestBorrowTool($myNeighborId, $toolId, $message);
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'toolId' => 'required|integer',
+    'message' => 'required'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Delete a borrow request
+$app->post('/v1/deleteborrowrequest', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $toolId = $bodyArray["toolId"];
+
+        (new Tool())->deleteBorrowRequest($myNeighborId, $toolId);
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'toolId' => 'required|integer',
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Accept a tool borrow request
+$app->post('/v1/acceptborrow', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $toolId = $bodyArray["toolId"];
+        $notificationId = $bodyArray["notificationId"];
+        $message = $bodyArray["message"];
+
+        (new Tool())->acceptBorrowRequest($myNeighborId, $toolId, $notificationId, $message);
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'toolId' => 'required|integer',
+    'notificationId' => 'required|integer',
+    'message' => 'required',
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Reject a tool borrow request
+$app->post('/v1/rejectborrow', function (Request $request, Response $response, array $args) {
+    try {
+        $myNeighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $toolId = $bodyArray["toolId"];
+        $notificationId = $bodyArray["notificationId"];
+
+        (new Tool())->rejectBorrowRequest($myNeighborId, $toolId, $notificationId);
+        return $response->withJson([ "result" => "success" ]);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'toolId' => 'required|integer',
+    'notificationId' => 'required|integer',
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+
+/////
+// Notifications
+/////
+
 
 // Get all notifications
 $app->post('/v1/getnotifications', function (Request $request, Response $response, array $args) {
