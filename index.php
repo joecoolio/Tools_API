@@ -52,6 +52,34 @@ $app->add(new RKA\Middleware\IpAddress($checkProxyHeaders, $trustedProxies));
 // Authorization
 /////
 
+// Check a userid to see if it's already in use
+$app->post('/v1/auth/useridavailable', function (Request $request, Response $response, array $args) {
+    try {
+        $userid = $request->getParam('userid');
+
+        $retval = ! (new User())->userIdExists($userid);
+        return $response->withJson([ "result" => $retval ]);;
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the proper fields are in the request
+->add( new ValidateMiddleware([
+    'userid' => 'required',
+]) )
+// Make sure the body is multipart/form-data formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Non-mandatory auth
+->add( new AuthMiddlewareNonMandatory() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+
 // Register (user, pass) => (access token, refresh token) - same as login + create user
 $app->post('/v1/auth/register', function (Request $request, Response $response, array $args) {
     try {

@@ -7,10 +7,18 @@ use \App\Util;
 use Slim\Psr7\UploadedFile;
 
 class File extends BaseModel {
+    protected static $mimeMap = [
+        'image/jpeg' => 'jpeg',
+        'image/png' => 'png',
+    ];
+
     // Upload a file and return the cretaed filename
     public function uploadFile($directory, $uploadedFile) {
         if ($uploadedFile instanceof UploadedFile) {
             $extension = pathinfo($uploadedFile->getClientFilename(), PATHINFO_EXTENSION);
+            if ($extension == "") {
+                $extension = File::$mimeMap[$uploadedFile->getClientMediaType()];
+            }
             $basename = Util::uuidv4();
             $filename = sprintf('%s.%0.8s', $basename, $extension);
 
@@ -25,11 +33,6 @@ class File extends BaseModel {
 
     // Upload a base64 encoded file and return the cretaed filename
     protected function saveBase64ToFile($directory, string $base64String): string {
-        $mimeMap = [
-            'image/jpeg' => 'jpeg',
-            'image/png' => 'png',
-        ];
-
         // Extract Base64 data and MIME type
         $parts = explode(',', $base64String);
         $encodedData = end($parts);
@@ -48,7 +51,7 @@ class File extends BaseModel {
         if (!$mimeType) {
             $mimeType = 'image/png'; // Fallback if MIME type not in data URI
         }
-        $ext = $mimeMap[$mimeType];
+        $ext = File::$mimeMap[$mimeType];
       
         // Create the file and dump the contents into it
         $basename = Util::uuidv4();

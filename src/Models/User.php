@@ -6,6 +6,21 @@ use \PDO;
 use \App\Util;
 
 class User extends BaseModel {
+    // Determine if a userid exists or not.
+    public function userIdExists(string $userid) {
+        $pdo = Util::getDbConnection();
+        $stmt = $pdo->prepare("
+            select count(*)
+            from neighbor
+            where userid = :userid
+        ");
+        $stmt->execute(params: [
+            ":userid" => $userid,
+        ]);
+
+        return $stmt->fetchColumn() > 0;
+    }
+
     // Get my info
     public function getInfo(int $neighborId) {
         $pdo = Util::getDbConnection();
