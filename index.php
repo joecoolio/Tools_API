@@ -1,4 +1,5 @@
 <?php
+use App\Models\GemeniAI;
 use Slim\Http\Response as Response;
 use Slim\Http\ServerRequest as Request;
 use Psr\Http\Server\RequestHandlerInterface as RequestHandler;
@@ -79,7 +80,6 @@ $app->post('/v1/auth/useridavailable', function (Request $request, Response $res
 ->add( new TimerMiddleware() )
 ;
 
-
 // Register (user, pass) => (access token, refresh token) - same as login + create user
 $app->post('/v1/auth/register', function (Request $request, Response $response, array $args) {
     try {
@@ -119,7 +119,7 @@ $app->post('/v1/auth/register', function (Request $request, Response $response, 
     'photo' => 'uploaded_file:0,1500K,png,jpeg'
 ]) )
 // Make sure the body is multipart/form-data formatted
-->add( new MultiPartBodyMiddleware() )
+->add( new JsonBodyMiddleware() )
 // Audit
 ->add( new AuditMiddleware() )
 // Non-mandatory auth
@@ -709,6 +709,60 @@ $app->post('/v1/updatetool', function (Request $request, Response $response, arr
 // Tools
 /////
 
+
+// Get category for tool description
+$app->post('/v1/toolcategory', function (Request $request, Response $response, array $args) {
+    try {
+        $bodyArray = $request->getParsedBody();
+        $tooldescription = $bodyArray["tooldescription"];
+        
+        return $response->withJson((new GemeniAI())->getCategoryForTool($tooldescription));
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'tooldescription' => 'required'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
+
+// Get keywords for tool description
+$app->post('/v1/toolkeywords', function (Request $request, Response $response, array $args) {
+    try {
+        $bodyArray = $request->getParsedBody();
+        $tooldescription = $bodyArray["tooldescription"];
+        
+        return $response->withJson((new GemeniAI())->getKeywordsForTool($tooldescription));
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+// Make sure the id is in the body
+->add( new ValidateMiddleware([
+    'tooldescription' => 'required'
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Audit
+->add( new AuditMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+// Time each request
+->add( new TimerMiddleware() )
+;
 
 // List all tools available to me
 $app->post('/v1/getalltools', function (Request $request, Response $response, array $args) {

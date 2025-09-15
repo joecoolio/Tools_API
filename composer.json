@@ -9,11 +9,17 @@
         "akrabat/ip-address-middleware": "^2.6.1",
         "guzzlehttp/psr7":"^2.7.1",
         "predis/predis":"^3.2",
-        "minishlink/web-push-bundle":"^6.3"
+        "minishlink/web-push-bundle":"^6.3",
+        "google-gemini-php/client":"^2.6"
     },
     "autoload": {
         "psr-4": {
             "App\\": "src/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
         }
     }
 }
