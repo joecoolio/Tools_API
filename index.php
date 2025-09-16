@@ -5,7 +5,6 @@ use Slim\Http\ServerRequest as Request;
 use Psr\Http\Server\RequestHandlerInterface as RequestHandler;
 
 use Slim\Factory\AppFactory;
-use Slim\Routing\RouteContext;
 
 // // Middleware classes
 use App\Middleware\JSONBodyMiddleware;
@@ -27,7 +26,6 @@ use App\Util;
 use App\Models\Neighbor;
 use App\Models\Tool;
 use App\Models\User;
-use App\Models\File;
 use App\Models\PushNotification;
 
 require 'vendor/autoload.php';
@@ -41,7 +39,7 @@ $config = require 'config.php';
 //$config['displayErrorDetails'] = true;
 
 $app = AppFactory::create();
-// $app->setBasePath($_ENV['WEB_BASE_PATH']);
+$app->setBasePath($_ENV['WEB_BASE_PATH']);
 $app->addBodyParsingMiddleware();
 $app->addErrorMiddleware(true, true, true);
 
