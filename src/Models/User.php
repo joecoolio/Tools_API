@@ -51,8 +51,14 @@ class User extends BaseModel {
     // Get all of your friends
     // Level 1 are direct friends, level 2 are friends of them, etc.
     // If friends haven't been retrieved, that happens automatically.
-    public function getFriends(int $neighborId, int $level = 999): string {
+    public function getFriends(int $neighborId, int $level = 999, float $radius_miles = 9999, array $searchTerms = [], bool $searchWithAnd = false): string {
         $pdo = Util::getDbConnection();
+
+        // Convert search terms into a proper query form
+        $includeSearchClause = count($searchTerms) > 0;
+        $connector = $searchWithAnd ? "&" : "|";
+        $searchString = "and f.search_vector @@ to_tsquery('english', :searchVariable)";
+        $searchVariable = implode($connector, $searchTerms);
 
         // Get friends filtered by depth
         $friends = Util::getFriends($neighborId, $level);
@@ -76,17 +82,25 @@ class User extends BaseModel {
                 inner join me
                     on f.id != me.id
             where f.id = any(:friendIds)
-        ";
+            " . ($includeSearchClause ? $searchString : "")
+        ;
         $stmt = $pdo->prepare($sql);
 
         // Get all the friend IDs as an array
         $neighborIds = array_column($friends,"friend_id");
+        $freindsArrayString = '{' . implode(',', $neighborIds) . '}';
 
-        $pgArrayString = '{' . implode(',', $neighborIds) . '}';
-        $stmt->execute([ 
+        // Search parameters
+        $params = [ 
             ':neighborId' => $neighborId,
-            ':friendIds' => $pgArrayString
-        ]);
+            ':friendIds' => $freindsArrayString
+        ];
+        // Add search clause if needed
+        if ($includeSearchClause) {
+            $params[':searchVariable'] = $searchVariable;
+        }
+
+        $stmt->execute($params);
         $neighbors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Add the friend level to the results by looking it up

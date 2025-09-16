@@ -23,7 +23,7 @@ Which of those categories best fits the product \"$toolDescription\"? Give the a
     }
 
     public function getKeywordsForTool(string $toolDescription): array {
-        $query = "create a json array of 8 search keywords for this tool and return only the array, nothing else: $toolDescription";
+        $query = "create a json array of 5 search keywords for this tool and return only the array, nothing else: $toolDescription";
         
         return $this->runQuery($query);
     }

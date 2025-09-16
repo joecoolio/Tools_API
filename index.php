@@ -302,8 +302,11 @@ $app->post('/v1/friends', function (Request $request, Response $response, array 
         $neighborId = $request->getAttribute("neighborId");
         $bodyArray = $request->getParsedBody();
         $depth = $bodyArray["depth"];
+        $radiusMiles = $bodyArray["radius_miles"];
+        $searchTerms = array_key_exists("search_terms", $bodyArray) ? $bodyArray["search_terms"] : [];
+        $searchWithAnd = array_key_exists("search_with_and", $bodyArray) ? $bodyArray["search_with_and"] : false;
 
-        $retval = (new User())->getFriends($neighborId, $depth);
+        $retval = (new User())->getFriends($neighborId, $depth, $radiusMiles, $searchTerms, $searchWithAnd);
         $response->getBody()->write($retval);
         return $response;
     } catch (Exception $e) {
@@ -314,7 +317,10 @@ $app->post('/v1/friends', function (Request $request, Response $response, array 
 })
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
-    'depth' => 'required|numeric'
+    'depth' => 'required|numeric',
+    'radius_miles' => 'required|numeric',
+    'search_terms' => 'array',
+    'search_with_and' => 'required_with:search_terms'
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
@@ -338,8 +344,10 @@ $app->post('/v1/getneighbors', function (Request $request, Response $response, a
         $neighborId = $request->getAttribute("neighborId");
         $bodyArray = $request->getParsedBody();
         $radiusMiles = $bodyArray["radius_miles"];
+        $searchTerms = array_key_exists("search_terms", $bodyArray) ? $bodyArray["search_terms"] : [];
+        $searchWithAnd = array_key_exists("search_with_and", $bodyArray) ? $bodyArray["search_with_and"] : false;
         
-        $retval = (new Neighbor())->listAllNeighbors($neighborId, $radiusMiles);
+        $retval = (new Neighbor())->listAllNeighbors($neighborId, $radiusMiles, $searchTerms, $searchWithAnd);
         $response->getBody()->write($retval);
         return $response;
     } catch (Exception $e) {
@@ -350,7 +358,9 @@ $app->post('/v1/getneighbors', function (Request $request, Response $response, a
 })
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
-    'radius_miles' => 'required|numeric'
+    'radius_miles' => 'required|numeric',
+    'search_terms' => 'array',
+    'search_with_and' => 'required_with:search_terms'
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
@@ -661,6 +671,7 @@ $app->post('/v1/updatetool', function (Request $request, Response $response, arr
         $productUrl = $request->getParam('product_url');
         $replacementCost = $request->getParam('replacement_cost');
         $categoryId = $request->getParam('category');
+        $searchTerms = $request->getParam('search_terms');
         // $uploadedFile = $request->getUploadedFiles()['photo'];
         $uploadedFile = $request->getParam('photo');
         $directory = 'images';
@@ -674,6 +685,7 @@ $app->post('/v1/updatetool', function (Request $request, Response $response, arr
             $productUrl,
             $replacementCost,
             $categoryId,
+            $searchTerms,
             $uploadedFile,
             $directory
         );
@@ -770,8 +782,10 @@ $app->post('/v1/getalltools', function (Request $request, Response $response, ar
         $neighborId = $request->getAttribute("neighborId");
         $bodyArray = $request->getParsedBody();
         $radiusMiles = $bodyArray["radius_miles"];
+        $searchTerms = array_key_exists("search_terms", $bodyArray) ? $bodyArray["search_terms"] : [];
+        $searchWithAnd = array_key_exists("search_with_and", $bodyArray) ? $bodyArray["search_with_and"] : false;
 
-        $retval = (new Tool())->listAllTools($neighborId, $radiusMiles);
+        $retval = (new Tool())->listAllTools($neighborId, $radiusMiles, $searchTerms, $searchWithAnd);
         return $response->withJson($retval);
     } catch (Exception $e) {
         $badresponse = new \GuzzleHttp\Psr7\Response();
@@ -781,7 +795,9 @@ $app->post('/v1/getalltools', function (Request $request, Response $response, ar
 })
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
-    'radius_miles' => 'required|numeric'
+    'radius_miles' => 'required|numeric',
+    'search_terms' => 'array',
+    'search_with_and' => 'required_with:search_terms'
 ]) )
 // Audit
 ->add( new AuditMiddleware() )

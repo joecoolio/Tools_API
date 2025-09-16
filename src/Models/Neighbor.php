@@ -89,9 +89,16 @@ class Neighbor extends BaseModel {
     }
 
     // Get all the neighbors and how far away each one is
-    public function listAllNeighbors(int $neighborId, float $radius_miles = 9999): string {
+    public function listAllNeighbors(int $neighborId, float $radius_miles = 9999, array $searchTerms = [], bool $searchWithAnd = false): string {
         $pdo = Util::getDbConnection();
-        $stmt = $pdo->prepare('
+
+        // Convert search terms into a proper query form
+        $includeSearchClause = count($searchTerms) > 0;
+        $connector = $searchWithAnd ? "&" : "|";
+        $searchString = "and f.search_vector @@ to_tsquery('english', :searchVariable)";
+        $searchVariable = implode($connector, $searchTerms);
+
+        $stmt = $pdo->prepare("
             with me as (
                 select id, home_address_point from neighbor where id = :neighborId
             )
@@ -113,7 +120,7 @@ class Neighbor extends BaseModel {
                 left outer join notification n
                     on me.id = n.from_neighbor 
                     and f.id = n.to_neighbor
-                    and n.type = \'friend_request\'
+                    and n.type = 'friend_request'
                     and n.resolved = false
             where
                 ST_DWithin(
@@ -121,11 +128,20 @@ class Neighbor extends BaseModel {
                     me.home_address_point,
                     :radius
                 )
-        ');
-        $stmt->execute(params: [
+                " . ($includeSearchClause ? $searchString : "")
+        );
+
+        // Search parameters
+        $params = [
             ':neighborId' => $neighborId,
             ':radius' => $radius_miles * 1.60934 * 1000
-        ]);
+        ];
+        // Add search clause if needed
+        if ($includeSearchClause) {
+            $params[':searchVariable'] = $searchVariable;
+        }
+
+        $stmt->execute($params);
         $neighbors = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Get friends (any depth)

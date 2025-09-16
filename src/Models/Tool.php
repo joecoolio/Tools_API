@@ -24,7 +24,8 @@ class Tool extends BaseModel {
                     c.name category,
                     c.icon category_icon,
                     t.photo_link,
-                    'owned' status
+                    'owned' status,
+                    t.search_terms
                 from
                     tool t
                     inner join tool_category c
@@ -34,13 +35,24 @@ class Tool extends BaseModel {
 
         $stmt->execute(params: [ $neighborId ]);
         $tools = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Convert search terms string to an array
+        foreach($tools as &$t) {
+            if ($t['search_terms'] != null) {
+                $t['search_terms'] = explode(',', trim($t['search_terms'], '{}'));
+                $t['search_terms'] = array_map(function($item) {
+                    return trim($item, '"\''); // Removes both single and double quotes
+                }, $t['search_terms']);
+            }
+        }
 
         return json_encode($tools );
     }
 
     // Get all the tools available to a neighbor
     // This gets the list of friends and filters based on that
-    public function listAllTools(int $neighborId, float $radius_miles = 9999): array {
+    // searchWithAnd: true means (a & b) while false means (a | b) 
+    public function listAllTools(int $neighborId, float $radius_miles = 9999, array $searchTerms = [], bool $searchWithAnd = false): array {
         // Get friends
         $friends = Util::getFriends($neighborId);
 
@@ -52,6 +64,12 @@ class Tool extends BaseModel {
         // Get all the friend IDs as an array
         $neighborIds = array_column($friends,"friend_id");
         $neighborIdsArrayString = '{' . implode(',', $neighborIds) . '}';
+
+        // Convert search terms into a proper query form
+        $includeSearchClause = count($searchTerms) > 0;
+        $connector = $searchWithAnd ? "&" : "|";
+        $searchString = "and t.search_vector @@ to_tsquery('english', :searchVariable)";
+        $searchVariable = implode($connector, $searchTerms);
 
         $pdo = Util::getDbConnection();
         $sql = "
@@ -71,6 +89,7 @@ class Tool extends BaseModel {
                 c.icon category_icon,
                 t.photo_link,
                 'available' status,
+                t.search_terms,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
@@ -89,14 +108,33 @@ class Tool extends BaseModel {
                     me.home_address_point,
                     :radius
                 )
-        ";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute(params: [
+                " . ($includeSearchClause ? $searchString : "")
+        ;
+
+        // Search parameters
+        $params = [
             ':neighborId' => $neighborId,
             ':friendIds' => $neighborIdsArrayString,
             ':radius' => $radius_miles * 1.60934 * 1000
-        ]);
+        ];
+        // Add search clause if needed
+        if ($includeSearchClause) {
+            $params[':searchVariable'] = $searchVariable;
+        }
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
         $tools = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Convert search terms string to an array
+        foreach($tools as &$t) {
+            if ($t['search_terms'] != null) {
+                $t['search_terms'] = explode(',', trim($t['search_terms'], '{}'));
+                $t['search_terms'] = array_map(function($item) {
+                    return trim($item, '"\''); // Removes both single and double quotes
+                }, $t['search_terms']);
+            }
+        }
 
         return $tools;
     }
@@ -124,6 +162,7 @@ class Tool extends BaseModel {
                     when t.owner_id = me.id then 'owned'
                     else 'available'
                 end status,
+                t.search_terms,
                 ST_Y(f.home_address_point::geometry) AS latitude,
                 ST_X(f.home_address_point::geometry) AS longitude,
                 ST_Distance(me.home_address_point, f.home_address_point) distance_m
@@ -141,6 +180,13 @@ class Tool extends BaseModel {
         $stmt->execute(params: [ ':toolId' => $toolId, ':neighborId' => $neighborId ]);
         $tool = $stmt->fetch(PDO::FETCH_ASSOC);
 
+        // Convert search terms string to an array
+        if ($tool['search_terms'] != null) {
+            $tool['search_terms'] = explode(',', trim($tool['search_terms'], '{}'));
+            $tool['search_terms'] = array_map(function($item) {
+                return trim($item, '"\''); // Removes both single and double quotes
+            }, $tool['search_terms']);
+        }
         return $tool;
     }
 
@@ -170,6 +216,7 @@ class Tool extends BaseModel {
         string $productUrl,
         float $replacementCost,
         int $categoryId,
+        array $searchTerms,
         $photoFile,
         $uploadDirectory
     ): void {
@@ -181,13 +228,13 @@ class Tool extends BaseModel {
 
         // Update all the data
         $data = [
-            'owner_id' => $neighborId,
             'name' => $name,
             'product_url' => $productUrl,
             'replacement_cost' => $replacementCost,
             'category' => $categoryId,
             'short_name' => $shortName,
             'brand' => $brand,
+            'search_terms' => $searchTerms,
         ];
         if ($filename) $data['photo_link'] = $filename;
 
@@ -196,8 +243,16 @@ class Tool extends BaseModel {
         // $placeholders = array_map(fn($f) => ":$f", $fields);
         $kvs = array_map(fn($f) => "$f = :$f", $fields);
 
-        // Add toolid to the data
+        // Handle the array in $search_terms
+        $searchTermArrayString = "{}";
+        if (count($searchTerms) > 0) {
+            $searchTermArrayString = '{' . implode(',', array_map(fn($v) => '"' . $v . '"', $searchTerms)) . '}';
+        }
+        $data['search_terms'] = $searchTermArrayString;
+
+        // Add toolid and neighborId to the data
         $data['toolId'] = $toolId;
+        $data['neighborId'] = $neighborId;
 
         // Run an update
         $pdo = Util::getDbConnection();
@@ -205,7 +260,7 @@ class Tool extends BaseModel {
         $sql =
             "update tool set " . 
             implode(', ', $kvs) . " " .
-            "where id = :toolId";
+            "where id = :toolId and owner_id = :neighborId";
 
         $stmt = $pdo->prepare($sql);
         $stmt->execute($data);
@@ -219,6 +274,7 @@ class Tool extends BaseModel {
         string $productUrl,
         float $replacementCost,
         int $categoryId,
+        array $searchTerms,
         $photoFile,
         $uploadDirectory
     ): void {
@@ -237,6 +293,7 @@ class Tool extends BaseModel {
             'category' => $categoryId,
             'short_name' => $shortName,
             'brand' => $brand,
+            'search_terms' => $searchTerms,
         ];
         if ($filename) $data['photo_link'] = $filename;
 
