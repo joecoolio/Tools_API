@@ -616,7 +616,7 @@ $app->post('/v1/createtool', function (Request $request, Response $response, arr
         $productUrl = $request->getParam('product_url');
         $replacementCost = $request->getParam('replacement_cost');
         $categoryId = $request->getParam('category');
-        // $uploadedFile = $request->getUploadedFiles()['photo'];
+        $searchTerms = $request->getParam('search_terms');
         $uploadedFile = $request->getParam('photo');
         $directory = 'images';
 
@@ -628,6 +628,7 @@ $app->post('/v1/createtool', function (Request $request, Response $response, arr
             $productUrl,
             $replacementCost,
             $categoryId,
+            $searchTerms,
             $uploadedFile,
             $directory
         );
@@ -645,6 +646,8 @@ $app->post('/v1/createtool', function (Request $request, Response $response, arr
     'name' => 'required',
     'product_url' => 'required',
     'replacement_cost' => 'required|numeric',
+    'category' => 'required|numeric',
+    'search_terms' => 'required|array',
     'photo' => 'uploaded_file:0,1500K,png,jpeg'
 ]) )
 // Make sure the body is multipart/form-data formatted
@@ -702,6 +705,8 @@ $app->post('/v1/updatetool', function (Request $request, Response $response, arr
     'name' => 'required',
     'product_url' => 'required',
     'replacement_cost' => 'required|numeric',
+    'category' => 'required|numeric',
+    'search_terms' => 'required|array',
     'photo' => 'uploaded_file:0,1500K,png,jpeg'
 ]) )
 // Make sure the body is multipart/form-data formatted
