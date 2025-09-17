@@ -302,6 +302,13 @@ class Tool extends BaseModel {
         $placeholders = array_map(fn($f) => ":$f", $fields);
         // $kvs = array_map(fn($f) => "$f = :$f", $fields);
 
+        // Handle the array in $search_terms
+        $searchTermArrayString = "{}";
+        if (count($searchTerms) > 0) {
+            $searchTermArrayString = '{' . implode(',', array_map(fn($v) => '"' . $v . '"', $searchTerms)) . '}';
+        }
+        $data['search_terms'] = $searchTermArrayString;
+
         $pdo = Util::getDbConnection();
 
         $pdo->beginTransaction();
