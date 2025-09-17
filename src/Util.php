@@ -30,7 +30,7 @@ abstract class Util {
     }
 
     public static function getDbConnection() : PDO {
-        $dbInfo = sprintf("pgsql:host=%s;port=%d;dbname=%s;user=%s;password=%s",
+        $dbInfo = sprintf("pgsql:sslmode=require;host=%s;port=%d;dbname=%s;user=%s;password=%s",
             $_ENV['DATABASE_HOST'],
             $_ENV['DATABASE_PORT'],
             $_ENV['DATABASE_NAME'],
