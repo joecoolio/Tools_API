@@ -32,9 +32,9 @@ class AuditMiddleware extends BaseModel {
         $response = $handler->handle($request);
     
         // After execution, record the api invocation
-        if ($userName == null && $response->hasHeader("www_username")) {
+        if ($userName == null && $response->hasHeader("userId")) {
             // The validate email token process starts with no user but adds this header
-            $userName = $response->getHeader("www_username")[0];
+            $userName = $response->getHeader("userId")[0];
         }
         $endTimeUs = microtime(true);
         $duration = round(($endTimeUs - $startTimeUs) * 1000, 3);

@@ -18,7 +18,9 @@ class AuthUserLogin extends AuthUser{
             // Login successful, build tokens and return them
             $tokens = $this->createTokens($bodyArray['userid'], $loginResult['neighborId']);
             $response->getBody()->write(json_encode($tokens));
-            return $response->withHeader("www_username", $bodyArray['userid']);;
+            return $response
+                ->withHeader("userId", $bodyArray['userid'])
+                ->withHeader("neighborId", (string) $loginResult['neighborId']);
         } else {
             // Login failed, return 401
             $badresponse = new \GuzzleHttp\Psr7\Response();

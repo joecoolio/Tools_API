@@ -105,7 +105,9 @@ class AuthUserRegister extends AuthUser {
 
             $tokens = $this->createTokens($userid, $neighborId);
             $response->getBody()->write(json_encode($tokens));
-            return $response->withHeader("www_username", $userid);
+            return $response
+                ->withHeader("userId", $userid)
+                ->withHeader("neighborId", (string) $neighborId);
         }
     }
 

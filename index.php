@@ -15,6 +15,8 @@ use App\Middleware\AuthMiddlewareNonMandatory;
 use App\Middleware\ValidateMiddleware;
 use App\Middleware\MultiPartValidateMiddleware;
 use App\Middleware\AuditMiddleware;
+use App\Middleware\SendNotificationMiddleware;
+use App\Middleware\CleanupMiddleware;
 
 // // Auth classes
 use App\Auth\AuthUserLogin;
@@ -98,6 +100,8 @@ $app->post('/v1/auth/register', function (Request $request, Response $response, 
         return $badresponse->withStatus(500);
     }
 })
+// Send a welcome notification
+->add(new SendNotificationMiddleware("Welcome to the system!  Cool ain't it?!!!!"))
 // Add headers per RFC 6749
 ->add(
     function (Request $request, RequestHandler $handler) {
@@ -1052,6 +1056,7 @@ $app->options('/{routes:.+}', function ($request, $response, $args) {
     return $response;
 });
 
+// CORS stuff
 $app->add(function ($request, $handler) {
     $response = $handler->handle($request);
     return $response
@@ -1059,6 +1064,9 @@ $app->add(function ($request, $handler) {
             ->withHeader('Access-Control-Allow-Headers', 'X-Requested-With, Content-Type, Accept, Origin, Authorization')
             ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
 });
+
+// Final cleanup
+$app->add(new CleanupMiddleware([ "userId", "neighborId" ]));
 
 $app->map(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], '/{routes:.+}', function ($request, $response) {
     throw new \Slim\Exception\HttpNotFoundException($request);
