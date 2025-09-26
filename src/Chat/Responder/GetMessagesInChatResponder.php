@@ -15,15 +15,17 @@ class GetMessagesInChatResponder extends Responder {
 
         $pdo = Util::getDbConnection();
 
-        // Create the request in the notification table.  If there's already a request, just do nothing.
+        // Get all the messages for the chat
         $stmt = $pdo->prepare("
-            select id, from_neighbor, send_ts, message
+            select id, from_neighbor, send_ts, message,
+                read_by @> ARRAY[:me]::int[] read
             from chat_message
             where chat_id = :chat_id
             order by send_ts desc
         ");
         $stmt->execute(params: [
-            ":chat_id" => $chat_id
+            ":chat_id" => $chat_id,
+            ":me" => $myNeighborId,
         ]);
         $messages = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 

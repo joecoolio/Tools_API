@@ -2,6 +2,7 @@
 
 namespace App\Auth;
 
+use App\Util;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
@@ -27,7 +28,7 @@ class AuthRefreshToken extends AuthUser {
         }
         
         // Validate the refresh token
-        $jwt = $this->validateJWT($bodyArray['refresh_token'], isRefreshToken: true);
+        $jwt = Util::validateJWT($bodyArray['refresh_token'], isRefreshToken: true);
         // Check for validation error
         if (array_key_exists("error_code", $jwt)) {
             $code = $jwt["error_code"];

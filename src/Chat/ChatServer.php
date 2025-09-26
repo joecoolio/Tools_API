@@ -12,6 +12,7 @@ use App\Chat\Responder\PingResponder;
 use App\Chat\Responder\SendMessageResponder;
 use App\Chat\Responder\GetChatsResponder;
 use App\Chat\Responder\GetMessagesInChatResponder;
+use App\Chat\Responder\MarkMessageReadResponder;
 
 use App\Util;
 use App\Chat\ChatUtil;
@@ -34,6 +35,7 @@ class Chatserver {
         "send_message" => SendMessageResponder::class,
         "get_chats" => GetChatsResponder::class,
         "get_messages" => GetMessagesInChatResponder::class,
+        "mark_message_read" => MarkMessageReadResponder::class,
     ];
 
     public function __construct(string $address)
