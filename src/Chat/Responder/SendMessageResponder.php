@@ -11,7 +11,6 @@ class SendMessageResponder extends Responder {
         $myNeighborId = Responder::getMyNeighborId($connection);
 
         // Fields for the new message
-        $id = $request['id'];
         $toNeighborId = $request['to'];
         $message = $request['message'];
 
@@ -63,15 +62,16 @@ class SendMessageResponder extends Responder {
             
             // Then create the message
             $stmt = $pdo->prepare("
-                insert into chat_message (id, chat_id, from_neighbor, message)
-                values (:id, :chat_id, :from, :message)
+                insert into chat_message (chat_id, from_neighbor, message)
+                values (:chat_id, :from, :message)
+                returning id
             ");
             $stmt->execute(params: [
-                ":id" => $id,
                 ":chat_id" => $chatId,
                 ":from" => $myNeighborId,
                 ":message" => $message
             ]);
+            $messageId = $stmt->fetchColumn();
 
             $pdo->commit();
         } catch (\PDOException $e) {
@@ -84,7 +84,7 @@ class SendMessageResponder extends Responder {
         return [
             "type" => "send_message_result",
             "chat_id" => $chatId,
-            "message_id" => $id,
+            "message_id" => $messageId,
             "result" => true
         ];
     }
