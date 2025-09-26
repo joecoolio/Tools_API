@@ -27,6 +27,12 @@ class GetMessagesInChatResponder extends Responder {
         ]);
         $messages = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
+        // Flag which messages are from me and which is from others
+        $myNeighborId = $this->getMyNeighborId($connection);
+        foreach($messages as &$msg) {
+            $msg['sent_by_me'] = $msg['from_neighbor'] == $myNeighborId;
+        }
+
         return [
             "type" => "get_messages_result",
             "chat_id" => $chat_id,
