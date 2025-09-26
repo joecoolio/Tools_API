@@ -10,7 +10,8 @@
         "guzzlehttp/psr7":"^2.7.1",
         "predis/predis":"^3.2",
         "minishlink/web-push-bundle":"^6.3",
-        "google-gemini-php/client":"^2.6"
+        "google-gemini-php/client":"^2.6",
+        "workerman/workerman":"^5.1"
     },
     "autoload": {
         "psr-4": {

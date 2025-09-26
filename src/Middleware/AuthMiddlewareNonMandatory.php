@@ -6,7 +6,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Server\RequestHandlerInterface as RequestHandler;
 
-use App\Auth\AuthUser;
+use App\Util;
 
 /**
  * Middleware to validate a JWT if provided.  If not provided, ignore and keep going.
@@ -37,7 +37,7 @@ class AuthMiddlewareNonMandatory {
                 // Found a JWT, grab it
                 $jwt = $matches[1];
 
-                $token = AuthUser::validateToken($jwt, false);
+                $token = Util::validateJWT($jwt, false);
         
                 if (count($token) != 0 && !array_key_exists("error_code", $token)) {
                     // If you get here, the JWT is valid

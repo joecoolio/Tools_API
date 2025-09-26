@@ -4,6 +4,8 @@ namespace App;
 
 use PDO;
 use Predis\Client;
+use \Firebase\JWT\JWT;
+use \Firebase\JWT\Key;
 
 abstract class Util {
     public static function var_error_log( $object=null ){
@@ -42,12 +44,78 @@ abstract class Util {
         return $pdo;
     }
 
-    private static function getRedisConnection() : Client {
+    public static function getRedisConnection() : Client {
         $redis = new Client([
             'host' => $_ENV['REDIS_HOST'],
             'port' => $_ENV['REDIS_PORT']
         ]);
         return $redis;
+    }
+
+    /** Validate that a token is good.  Checks the contents and the db.
+     * 
+     * @param string encrypted JWT string
+     * @param bool if the token to be validated is a refresh token
+     * @return decoded JWT if valid; null otherwise
+     */
+    public static function validateJWT(string $token, bool $isRefreshToken = false) : array {
+        // $publicKey = file_get_contents('jwt.pub');
+        $publicKey = file_get_contents($_ENV['JWT_PUBLIC_FILENAME']);
+        $jwt = null;
+
+        if ($token == null) {
+            error_log("Request to validate null token");
+            return ["error_code" => "400", "error_msg" => "null token provided"];
+        }
+        
+        try {
+            $jwt = JWT::decode($token, new Key($publicKey, 'RS256'));
+        } catch (\Firebase\JWT\ExpiredException $e) {
+            error_log("Expired token");
+            return ["error_code" => "401", "error_msg" => "expired token"];
+        } catch (\LogicException $e) {
+            // errors having to do with environmental setup or malformed JWT Keys
+            error_log("Logic Exception: $e");
+            return ["error_code" => "400", "error_msg" => "logic exception $e"];
+        } catch (\UnexpectedValueException $e) {
+            // errors having to do with JWT signature and claims
+            error_log("Unexpected Value Exception: $e");
+            return ["error_code" => "400", "error_msg" => "unexpected value exception $e"];
+        }
+        
+        // Validate server name
+        if ($isRefreshToken && $jwt->iss != $_ENV['AUTH_SERVER_FQDN']) {
+            error_log("Token has wrong FQDN: {$jwt->iss}");
+            return ["error_code" => "400", "error_msg" => "Refresh token has wrong FQDN: {$jwt->iss}"];
+        }
+        if (!$isRefreshToken && $jwt->iss != $_ENV['SERVER_FQDN']) {
+            error_log("Token has wrong FQDN: {$jwt->iss}");
+            return ["error_code" => "400", "error_msg" => "Access token has wrong FQDN: {$jwt->iss}"];
+        }
+
+        // Validate role
+        if ($isRefreshToken && $jwt->role != 'refresh_token') {
+            error_log("Refresh token has wrong role: {$jwt->role}");
+            return ["error_code" => "400", "error_msg" => "Refresh token has wrong role: {$jwt->role}"];
+        }
+        if (!$isRefreshToken && $jwt->role != 'user_access') {
+            error_log("Access token has wrong role: {$jwt->role}");
+            return ["error_code" => "400", "error_msg" => "Access token has wrong role: {$jwt->role}"];
+        }
+        
+        // If it's a refresh token, check that it exists in the db
+        if ($isRefreshToken) {
+            $pdo = Util::getDbConnection();
+            $stmt = $pdo->prepare("select id from token where id = :id");
+            $stmt->execute([ ':id' => $jwt->revocationid ]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($result === null) {
+                error_log("Refresh token is not in the database: {$jwt->revocationid}");
+                return ["error_code" => "400", "error_msg" => "Refresh token is not in the database"];
+            }
+        }
+        
+        return (array) $jwt;
     }
 
     // Get friends for a user filtered to a maximum depth.

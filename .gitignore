@@ -5,3 +5,4 @@ jwt.pub
 vendor/
 images/*
 !images/default*.svg
+workerman.log

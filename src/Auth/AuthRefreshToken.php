@@ -27,7 +27,7 @@ class AuthRefreshToken extends AuthUser {
         }
         
         // Validate the refresh token
-        $jwt = $this->validateToken($bodyArray['refresh_token'], isRefreshToken: true);
+        $jwt = $this->validateJWT($bodyArray['refresh_token'], isRefreshToken: true);
         // Check for validation error
         if (array_key_exists("error_code", $jwt)) {
             $code = $jwt["error_code"];
