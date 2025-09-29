@@ -13,11 +13,10 @@ class IdentifyResponder extends Responder {
             $redis = Util::getRedisConnection();
 
             // Store chat connection ID → neighbor ID (1-to-1)
-            $key = "CHAT-WMID-TO-NID-" . $connection->id;
+            $key = "CHAT-CONNID-TO-NID-" . $connection->id;
             $redis->set($key, $jwt['neighborId']);
-
             // Store neighbor ID → chat connection IDs (1-to-many)
-            $key = "CHAT-NID-TO-WMID-" . $jwt['neighborId'];
+            $key = "CHAT-NID-TO-CONNID-" . $jwt['neighborId'];
             $existing = $redis->get($key);
             $array = $existing ? json_decode($existing, true) : [];
             $array[] = $connection->id;

@@ -4,40 +4,37 @@ namespace App\Chat\Responder;
 use App\Util;
 use Workerman\Connection\TcpConnection;
 
-class GetMessagesInChatResponder extends Responder {
+class NewMessageSender extends Responder {
 
     public function respond(TcpConnection $connection, array $request): array {
         // Get the user ID
         $myNeighborId = Responder::getMyNeighborId($connection);
 
         // Fields for the new message
-        $chat_id = $request['chat_id'];
+        $msg_id = $request['msg_id'];
 
         $pdo = Util::getDbConnection();
 
         // Get all the messages for the chat
-        $stmt = $pdo->prepare("
-            select id, from_neighbor, send_ts, message,
+        $stmt = $pdo->prepare(query: "
+            select id, chat_id, from_neighbor, send_ts, message,
                 read_by @> ARRAY[:me]::int[] read
             from chat_message
-            where chat_id = :chat_id
-            order by send_ts desc
+            where id = :msg_id
         ");
         $stmt->execute(params: [
-            ":chat_id" => $chat_id,
+            ":msg_id" => $msg_id,
             ":me" => $myNeighborId,
         ]);
-        $messages = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $msg = $stmt->fetch(\PDO::FETCH_ASSOC);
 
         // Flag which messages are from me and which is from others
-        foreach($messages as &$msg) {
-            $msg['sent_by_me'] = $msg['from_neighbor'] == $myNeighborId;
-        }
+        $msg['sent_by_me'] = $msg['from_neighbor'] == $myNeighborId;
 
         return [
-            "type" => "get_messages_result",
-            "chat_id" => $chat_id,
-            "messages" => $messages,
+            "type" => "new_message_result",
+            "chat_id" => $msg['chat_id'],
+            "message" => $msg,
             "result" => true
         ];
     }

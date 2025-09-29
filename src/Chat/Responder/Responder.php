@@ -20,7 +20,7 @@ abstract class Responder {
     // Only works if identification is already done.
     public static function getMyNeighborId($connection): int {
         $redis = Util::getRedisConnection();
-        $key = "CHAT-WMID-TO-NID-" . $connection->id;
+        $key = "CHAT-CONNID-TO-NID-" . $connection->id;
         $neighborId = $redis->get($key);
         if ($neighborId) {
             return (int) $neighborId;
