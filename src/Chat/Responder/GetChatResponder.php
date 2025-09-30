@@ -4,11 +4,14 @@ namespace App\Chat\Responder;
 use Amp\Websocket\WebsocketClient;
 use Amp\Postgres\PostgresConnectionPool;
 
-class GetChatsResponder extends Responder {
+class GetChatResponder extends Responder {
     public function respond(WebsocketClient $client, PostgresConnectionPool $dbConnPool, array $request): array {
         // Get the user ID
         $myNeighborId = Responder::getMyNeighborId($client);
 
+        // Fields for the new message
+        $chat_id = $request['chat_id'];
+        
         // Create the request in the notification table.  If there's already a request, just do nothing.
         $stmt = $dbConnPool->prepare("
             SELECT
@@ -22,19 +25,28 @@ class GetChatsResponder extends Responder {
                     on c.id = cn.chat_id
                 inner join chat_message cm
                     on c.id = cm.chat_id
-            GROUP BY c.id
+            where
+                c.id = :chat_id
+            group by
+                c.id
             HAVING bool_or(neighbor_id = :me)
-            order by c.started_ts
         ");
         $result = $stmt->execute(params: [
             "me" => $myNeighborId,
+            "chat_id" => $chat_id,
         ]);
-        $chats = iterator_to_array($result, false);
+        foreach ($result as $chat) {
+            return [
+                "type" => "get_chat_result",
+                "chat" => $chat,
+                "result" => true
+            ];
+        }
 
         return [
-            "type" => "get_chats_result",
-            "chats" => $chats,
-            "result" => true
+            "type" => "get_chat_result",
+            "chat_id" => $chat_id,
+            "result" => false
         ];
     }
 

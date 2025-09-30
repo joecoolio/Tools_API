@@ -1,28 +1,28 @@
 <?php
 namespace App\Chat\Responder;
 
-use App\Util;
-use Workerman\Connection\TcpConnection;
+use Amp\Websocket\WebsocketClient;
+use Amp\Postgres\PostgresConnectionPool;
 
 class MarkMessageReadResponder extends Responder {
-    public function respond(TcpConnection $connection, array $request): array {
+    public function respond(WebsocketClient $client, PostgresConnectionPool $dbConnPool, array $request): array {
         // Get the user ID
-        $myNeighborId = Responder::getMyNeighborId($connection);
+        $myNeighborId = Responder::getMyNeighborId($client);
 
         // Fields for the new message
         $messageId = $request['id'];
 
-        $pdo = Util::getDbConnection();
-
         // Create the request in the notification table.  If there's already a request, just do nothing.
-        $stmt = $pdo->prepare("
+        $stmt = $dbConnPool->prepare("
             UPDATE chat_message
             SET read_by = array_append(read_by, :me)
             WHERE id = :messageId
             AND NOT read_by @> ARRAY[:me]::int[]
         ");
-        $stmt->bindValue(':me', $myNeighborId, \PDO::PARAM_INT);
-        $stmt->bindValue(':messageId', $messageId);
+        $stmt->execute(params: [
+            "me" => $myNeighborId,
+            "messageId" => $messageId,
+        ]);
         $stmt->execute();
 
         return [

@@ -1,41 +1,48 @@
 <?php
 namespace App\Chat\Responder;
 
-use App\Util;
-use Workerman\Connection\TcpConnection;
+use Amp\Websocket\WebsocketClient;
+use Amp\Postgres\PostgresConnectionPool;
 
 class NewMessageSender extends Responder {
 
-    public function respond(TcpConnection $connection, array $request): array {
+    public function respond(WebsocketClient $client, PostgresConnectionPool $dbConnPool, array $request): array {
         // Get the user ID
-        $myNeighborId = Responder::getMyNeighborId($connection);
-
+        $myNeighborId = Responder::getMyNeighborId($client);
         // Fields for the new message
         $msg_id = $request['msg_id'];
 
-        $pdo = Util::getDbConnection();
-
+        try {
         // Get all the messages for the chat
-        $stmt = $pdo->prepare(query: "
+        $stmt = $dbConnPool->prepare("
             select id, chat_id, from_neighbor, send_ts, message,
                 read_by @> ARRAY[:me]::int[] read
             from chat_message
             where id = :msg_id
         ");
-        $stmt->execute(params: [
-            ":msg_id" => $msg_id,
-            ":me" => $myNeighborId,
+        $result = $stmt->execute(params: [
+            "msg_id" => $msg_id,
+            "me" => $myNeighborId,
         ]);
-        $msg = $stmt->fetch(\PDO::FETCH_ASSOC);
+        foreach ($result as $msg) {
+            // Flag which messages are from me and which is from others
+            $msg['sent_by_me'] = $msg['from_neighbor'] == $myNeighborId;
 
-        // Flag which messages are from me and which is from others
-        $msg['sent_by_me'] = $msg['from_neighbor'] == $myNeighborId;
+            return [
+                "type" => "new_message_result",
+                "chat_id" => $msg['chat_id'],
+                "message" => $msg,
+                "result" => true
+            ];
+        }
+    } catch (\Exception $e) {
+    }
 
+        // If something goes wrong, return failure
         return [
             "type" => "new_message_result",
-            "chat_id" => $msg['chat_id'],
-            "message" => $msg,
-            "result" => true
+            "message_id" => $msg_id,
+            "result" => false
         ];
     }
 

@@ -1,12 +1,30 @@
 <?php
-require 'vendor/autoload.php';
 
-use App\Chat\Responder\NewMessageSender;
-use Workerman\Connection\TcpConnection;
-use Workerman\Worker;
-use Workerman\Timer;
+use Amp\Http\Server\DefaultErrorHandler;
+use Amp\Http\Server\Request;
+use Amp\Http\Server\Response;
+use Amp\Http\Server\Router;
+use Amp\Http\Server\SocketHttpServer;
+use Amp\Http\Server\StaticContent\DocumentRoot;
+use Amp\Log\ConsoleFormatter;
+use Amp\Log\StreamHandler;
+use Amp\Socket;
+use Amp\Websocket\Server\Rfc6455Acceptor;
+use Amp\Websocket\Server\Websocket;
+use Amp\Websocket\Server\WebsocketClientGateway;
+use Amp\Websocket\Server\WebsocketClientHandler;
+use Amp\Websocket\Server\WebsocketGateway;
+use Amp\Websocket\WebsocketClient;
+use App\Chat\ChatUtil;
+use App\Util;
 use Dotenv\Dotenv;
-use Predis\Client;
+use Monolog\Logger;
+use function Amp\ByteStream\getStdout;
+use function Amp\delay;
+
+use Amp\Postgres\PostgresConfig;
+use Amp\Postgres\PostgresConnectionPool;
+use function Amp\async;
 
 use App\Chat\Responder\Responder;
 use App\Chat\Responder\IdentifyResponder;
@@ -15,9 +33,10 @@ use App\Chat\Responder\SendMessageResponder;
 use App\Chat\Responder\GetChatsResponder;
 use App\Chat\Responder\GetMessagesInChatResponder;
 use App\Chat\Responder\MarkMessageReadResponder;
+use App\Chat\Responder\GetChatResponder;
+use App\Chat\Responder\NewMessageSender;
 
-use App\Util;
-use App\Chat\ChatUtil;
+require __DIR__ . '/../../vendor/autoload.php';
 
 // Load .env
 $dotenv = Dotenv::createImmutable(__DIR__ . '/../..');
@@ -25,19 +44,19 @@ $dotenv->load();
 
 // Stateless responder map
 $responderMap = [
-    "identify" => IdentifyResponder::class,
-    "ping" => PingResponder::class,
-    "send_message" => SendMessageResponder::class,
-    "get_chats" => GetChatsResponder::class,
-    "get_messages" => GetMessagesInChatResponder::class,
-    "mark_message_read" => MarkMessageReadResponder::class,
+    "identify" => IdentifyResponder::class,                 // Identify yourself to the server
+    "ping" => PingResponder::class,                         // Ping to keep the connection alive
+    "send_message" => SendMessageResponder::class,          // Send a message
+    "get_chats" => GetChatsResponder::class,                // Get all chats involving me
+    "get_chat" => GetChatResponder::class,                  // Get a single chat (involving me)
+    "get_messages" => GetMessagesInChatResponder::class,    // Get all messages in a chat
+    "mark_message_read" => MarkMessageReadResponder::class, // Mark a message as read
 ];
 
+// Setup redis
 $redis = Util::getRedisConnection();
 
-$ws_worker = new Worker("websocket://0.0.0.0:8080");
-$ws_worker->connections = [];
-
+// Setup postgresql
 // PostgreSQL connection (async)
 $dbInfo = sprintf("host=%s port=%s dbname=%s user=%s password=%s sslmode=require",
     $_ENV['DATABASE_HOST'],
@@ -46,150 +65,179 @@ $dbInfo = sprintf("host=%s port=%s dbname=%s user=%s password=%s sslmode=require
     $_ENV['DATABASE_USER'],
     $_ENV['DATABASE_PASS']
 );
+$config = PostgresConfig::fromString($dbInfo);
+$postgresConnectionPool = new PostgresConnectionPool($config);
 
-// PostgreSQL Connection for async commands
-$pgAsyncConnection = pg_connect($dbInfo);
+// Clean out redis on startup
+$keys = $redis->keys('CHAT-CONNID-TO-NID-*');
+if ($keys) $redis->del($keys);
+$keys = $redis->keys('CHAT-NID-TO-CONNID-*');
+if ($keys) $redis->del($keys);
 
-// Issue LISTEN commands (async send)
-// Listen for new chat messages to arrive
-pg_send_query($pgAsyncConnection, "LISTEN new_chat_message");
-pg_get_result($pgAsyncConnection); // clear result
+// Setup Amp socket server and associated objects
+$logHandler = new StreamHandler(getStdout());
+$logHandler->setFormatter(new ConsoleFormatter());
+$logger = new Logger('server');
+$logger->pushHandler($logHandler);
 
-// Promise-style wrapper for LISTEN/NOTIFY
-function pgListenAsync($conn, callable $onNotify){
-    $fd = pg_socket($conn);
-    $loop = Worker::getEventLoop();
+$server = SocketHttpServer::createForDirectAccess($logger);
 
-    // Watch for data from PostgreSQL
-    $loop->onReadable($fd, function () use ($conn, $onNotify) {
-        // Clear any pending results
-        while ($res = pg_get_result($conn)) {
-            pg_free_result($res);
-        }
+// Listen on IPv4 and v6
+$server->expose(new Socket\InternetAddress('0.0.0.0', $_ENV['CHAT_SERVER_PORT']));
+$server->expose(new Socket\InternetAddress('[::]', $_ENV['CHAT_SERVER_PORT']));
 
-        // Fetch all notifications
-        while ($notify = pg_get_notify($conn, PGSQL_ASSOC)) {
-            $onNotify($notify);
-        }
-    });
-}
+$errorHandler = new DefaultErrorHandler();
+$acceptor = new Rfc6455Acceptor();
 
-$isIdentified = function(TcpConnection $connection) use ($redis): bool {
-    $key = "CHAT-CONNID-TO-NID-" . $connection->id;
-    return $redis->exists($key);
-};
+$clientHandler = new class implements WebsocketClientHandler {
+    // Helper function to determine if a client has identified themselves
+    private function isIdentified(WebsocketClient $client): bool {
+        global $redis;
 
-// On worker start, set up Postgres LISTEN
-$ws_worker->onWorkerStart = function($worker) use ($redis, $pgAsyncConnection) {
-    // Clean out redis on startup
-    $keys = $redis->keys('CHAT-CONNID-TO-NID-*');
-    if ($keys) $redis->del($keys);
-    $keys = $redis->keys('CHAT-NID-TO-CONNID-*');
-    if ($keys) $redis->del($keys);
-
-    // Register handler for notifications
-    pgListenAsync($pgAsyncConnection, function ($notify) use($worker) {
-        $payload = $notify['payload'];
-        echo "Got notification: $payload\n";
-
-        // The sender that will send the messages down below
-        $responder = new NewMessageSender();
-
-        // Send the message to all involved neighbors
-        $data = json_decode($payload, true);
-        foreach ($data['neighbors'] as $neighbor) {
-            $neighborId = $neighbor['neighbor_id'];
-            // Lookup the connection ID(s) for the neighbor 
-            foreach (ChatUtil::getConnectionIdsforNID($neighborId) as $clientId) {
-
-                // Get the connection for the given ID
-                $result = array_filter($worker->connections, fn($c) => $c->id === $clientId);
-                $client = reset($result);
-
-                if ($client != false) {
-                    // Send the new message to the connection
-                    echo "Sending new message to neighbor {$neighborId} @ conn: {$client->id}\n";
-                    $response = $responder->respond($client, [ "msg_id" => $data['message']['id'] ]);
-                    $client->send(json_encode($response));
-                }
-            }
-        }
-    });
-};
-
-// On connect
-$ws_worker->onConnect = function (TcpConnection $connection) use ($ws_worker) {
-    echo "New connection! ({$connection->id}) from IP {$connection->getRemoteIp()}\n";
-    $ws_worker->connections[$connection->id] = $connection;
-};
-
-// On disconnect
-$ws_worker->onClose = function (TcpConnection $connection) use ($ws_worker, $redis) {
-    echo "Connection closed: {$connection->id}\n";
-    unset($ws_worker->connections[$connection->id]);
-
-    // Update last seen date on neighbor to reflect when they logged off
-    $key = "CHAT-WMID-TO-NID-" . $connection->id;
-    $neighborId = $redis->get($key);
-
-    if ($neighborId != null) {
-        $pdo = Util::getDbConnection();
-        $stmt = $pdo->prepare("
-            update neighbor set chat_last_seen = now()
-            where id = :me
-        ");
-        $stmt->execute(params: [
-            ":me" => $neighborId
-        ]);
-
-        // Remove the neighbor mapping
-        $redis->del($key);
+        $key = "CHAT-CONNID-TO-NID-" . $client->getId();
+        return $redis->exists($key);
     }
-};
 
-$ws_worker->onMessage = function (TcpConnection $connection, string $msg) use ($isIdentified, $responderMap): void {
-    echo "Incoming[{$connection->id}]: $msg\n";
+    public function __construct(
+        private readonly WebsocketGateway $allClients = new WebsocketClientGateway(),
+    ) {
+        // Listen to the 'new_chat_message' channel from postgresql.
+        // When a new message arrives, send it to all involved parties.
+        async(function () use ($allClients)  {
+            global $postgresConnectionPool;
+            global $logger;
 
-    $dataArray = json_decode($msg, true);
+            $channel_name = 'new_chat_message';
+            $listener = $postgresConnectionPool->listen($channel_name);
+            $logger->debug(message: sprintf("Listening on channel: %s", $channel_name));
+            foreach ($listener as $notification) {
+                $logger->debug(sprintf("Notification (%s): %s", $notification->channel, $notification->payload));
 
-    if (isset($dataArray['type'])) {
-        $type = $dataArray['type'];
-        $responderClass = $responderMap[$type] ?? null;
-        $response = null;
+                // The sender that will send the messages down below
+                $responder = new NewMessageSender();
 
-        try {
-            if ($responderClass != null) {
-                $responder = new $responderClass();
-                if ($responder instanceof Responder) {
-                    if (! $responder->identificationRequired() || $isIdentified($connection)) {
-                        $response = $responder->respond($connection, $dataArray);
+                // Send the message to all involved neighbors
+                $data = json_decode($notification->payload, true);
+
+                foreach ($data['neighbors'] as $neighbor) {
+                    $neighborId = $neighbor['neighbor_id'];
+                    // Lookup the connection ID(s) for the neighbor 
+                    foreach (ChatUtil::getConnectionIdsforNID($neighborId) as $clientId) {
+
+                        // Get the connection for the given ID
+                        $result = array_filter($allClients->getClients(), fn($c) => $c->getId() === $clientId);
+                        $client = reset($result);
+
+                        if ($client != false) {
+                            // Send the new message to the connection
+                            $logger->debug(sprintf("Notification: sending new message to neighbor (%d) @ client (%d)", $neighborId, $client->getId()));
+                            $response = $responder->respond($client, $postgresConnectionPool, [ "msg_id" => $data['message']['id'] ]);
+                            $client->sendText(json_encode($response));
+                        }
                     }
                 }
             }
-            // Fallback if we don't know how to process the type
-            if ($response == null) {
-                $response = [
-                    "type" => "unsupported",
-                    "neighborId" => ChatUtil::getNIDforConnId($connection->id),
-                ];
+        });
+    }
+
+    public function handleClient(
+        WebsocketClient $client,
+        Request $request,
+        Response $response,
+    ): void {
+        global $postgresConnectionPool;
+        global $redis;
+        global $logger;
+        global $responderMap;
+        
+        // Add to list of all clients
+        $this->allClients->addClient($client);
+
+        // New connection
+        $logger->info(sprintf("New connection (%d) from IP %s", $client->getId(), $client->getRemoteAddress()));
+
+        // Loop for receiving/sending messages
+        foreach ($client as $payload) {
+            $msg = $payload->buffer();
+            $dataArray = json_decode($msg, true);
+
+            if (isset($dataArray['type'])) {
+                $type = $dataArray['type'];
+                if ($type != "ping")
+                    $logger->debug(message: sprintf("Incoming (%d): %s", $client->getId(), $msg));
+
+                $responderClass = $responderMap[$type] ?? null;
+                $response = null;
+
+                try {
+                    if ($responderClass != null) {
+                        $responder = new $responderClass();
+                        if ($responder instanceof Responder) {
+                            if (! $responder->identificationRequired() || $this->isIdentified($client)) {
+                                $response = $responder->respond($client, $postgresConnectionPool, $dataArray);
+                            }
+                        }
+                    }
+                    // Fallback if we don't know how to process the type
+                    if ($response == null) {
+                        $response = [
+                            "type" => "unsupported",
+                            "neighborId" => ChatUtil::getNIDforConnId($client->getId()),
+                        ];
+                    }
+                } catch (Exception $e) {
+                    error_log("Chat Exception: " . $e);
+                    $response = [
+                        "type" => "error",
+                        "message_uuid" => $dataArray["message_uuid"],
+                        "exception" => $e,
+                    ];
+                }
+
+                if ($type != "ping")
+                    $logger->debug(message: sprintf("Outgoing (%d): %s", $client->getId(), json_encode($response)));
+
+                $client->sendText(json_encode($response));
             }
-        } catch (Exception $e) {
-            error_log("Chat Exception: " . $e);
-            $response = [
-                "type" => "error",
-                "message_uuid" => $dataArray["message_uuid"],
-                "exception" => $e,
-            ];
         }
 
-        echo "Outgoing[{$connection->id}]: " . json_encode($response) . "\n";
-        $connection->send(json_encode($response));
+        // When connection drops, this runs
+        $logger->debug(message: sprintf("Connection closed: %d", $client->getId()));
+
+        // Update last seen date on neighbor to reflect when they logged off
+        $key = "CHAT-WMID-TO-NID-" . $client->getId();
+        $neighborId = $redis->get($key);
+
+        if ($neighborId != null) {
+            $stmt = $postgresConnectionPool->prepare("
+                update neighbor set chat_last_seen = now()
+                where id = :me
+            ");
+            $result = $stmt->execute(params: [
+                ":me" => $neighborId
+            ]);
+
+            // Remove the neighbor mapping
+            $redis->del($key);
+        }
     }
 };
 
-$ws_worker->onError = function (TcpConnection $connection, int $code, string $msg): void {
-    echo "Error[{$connection->id}]: $code - $msg\n";
-};
+$websocket = new Websocket($server, $logger, $acceptor, $clientHandler);
 
-// Run server
-Worker::runAll();
+$router = new Router($server, $logger, $errorHandler);
+$router->addRoute('GET', '/chat', $websocket);
+$router->setFallback(new DocumentRoot($server, $errorHandler, __DIR__));
+
+$server->start($router, $errorHandler);
+
+
+// For windows that can't use trapSignal
+// Just keep the server running forever
+// This must be async to avoid freezing the whole system
+while (true) delay(100);
+
+// Await SIGINT or SIGTERM to be received.
+// $signal = trapSignal([SIGINT, SIGTERM]);
+// $logger->info(sprintf("Received signal %d, stopping HTTP server", $signal));
+// $server->stop();
