@@ -65,6 +65,9 @@ class AuthMiddleware {
             $response = $handler->handle($request->withAttribute("userid", $token['userid'])->withAttribute("neighborId", $token['neighborId']));
         }
         
-        return $response;
+        // Add the username from the access token to the response too
+        return $response
+            ->withHeader("userId", $token['userid'])
+            ->withHeader("neighborId", (string) $token['neighborId']);
     }
 }

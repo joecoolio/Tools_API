@@ -47,7 +47,6 @@ $app->addErrorMiddleware(true, true, true);
 
 $checkProxyHeaders = true;
 $trustedProxies = [];
-$app->add(new RKA\Middleware\IpAddress($checkProxyHeaders, $trustedProxies));
 
 /////
 // Authorization
@@ -72,12 +71,8 @@ $app->post('/v1/auth/useridavailable', function (Request $request, Response $res
 ]) )
 // Make sure the body is multipart/form-data formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Non-mandatory auth
 ->add( new AuthMiddlewareNonMandatory() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Register (user, pass) => (access token, refresh token) - same as login + create user
@@ -122,12 +117,8 @@ $app->post('/v1/auth/register', function (Request $request, Response $response, 
 ]) )
 // Make sure the body is multipart/form-data formatted
 ->add( new JsonBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Non-mandatory auth
 ->add( new AuthMiddlewareNonMandatory() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Login (user, pass) => (access token, refresh token)
@@ -145,12 +136,8 @@ $app->post('/v1/auth/login', [new AuthUserLogin(), 'process'])
 ->add( new ValidateMiddleware([ 'userid' => 'required', 'password' => 'required' ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Non-mandatory auth
 ->add( new AuthMiddlewareNonMandatory() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Refresh token (refresh token)
@@ -171,12 +158,8 @@ $app->post('/v1/auth/refresh', [new AuthRefreshToken(), 'process'])
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Non-mandatory auth
 ->add( new AuthMiddlewareNonMandatory() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 
@@ -198,12 +181,8 @@ $app->post('/v1/myinfo', function (Request $request, Response $response, array $
         return $badresponse->withStatus(500);
     }
 })
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Validate an address
@@ -226,12 +205,8 @@ $app->post('/v1/validateaddress', function (Request $request, Response $response
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddlewareNonMandatory() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Update my info
@@ -268,12 +243,8 @@ $app->post('/v1/updateinfo', function (Request $request, Response $response, arr
 ]) )
 // Make sure the body is multipart/form-data formatted
 ->add( new MultiPartBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Discard stored friend list in redis.
@@ -290,12 +261,8 @@ $app->post('/v1/expirefriends', function (Request $request, Response $response, 
         return $badresponse->withStatus(500);
     }
 })
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Get all of my friends.
@@ -326,12 +293,8 @@ $app->post('/v1/friends', function (Request $request, Response $response, array 
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 
@@ -366,12 +329,8 @@ $app->post('/v1/getneighbors', function (Request $request, Response $response, a
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Get a single neighbor
@@ -390,18 +349,15 @@ $app->post('/v1/getneighbor', function (Request $request, Response $response, ar
         return $badresponse->withStatus(500);
     }
 })
+// TODO: Make sure this guy is my friend
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
     'neighborId' => 'required|integer'
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Get the photo for a neighbor
@@ -419,18 +375,15 @@ $app->post('/v1/getImage', function (Request $request, Response $response, array
         return $badresponse->withStatus(500);
     }
 })
+// TODO: Make sure this guy is my friend
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
     'photo_id' => 'required'
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Create a friendship request
@@ -457,12 +410,8 @@ $app->post('/v1/requestfriendship', function (Request $request, Response $respon
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Delete a friendship request
@@ -487,12 +436,8 @@ $app->post('/v1/deletefriendshiprequest', function (Request $request, Response $
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 
@@ -524,12 +469,8 @@ $app->post('/v1/createfriendship', function (Request $request, Response $respons
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Delete a friendship
@@ -554,12 +495,8 @@ $app->post('/v1/removefriendship', function (Request $request, Response $respons
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 
@@ -579,12 +516,8 @@ $app->post('/v1/gettoolcategories', function (Request $request, Response $respon
         return $badresponse->withStatus(500);
     }
 })
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // List all of my tools
@@ -601,12 +534,8 @@ $app->post('/v1/getmytools', function (Request $request, Response $response, arr
         return $badresponse->withStatus(500);
     }
 })
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Create a new tool
@@ -656,12 +585,8 @@ $app->post('/v1/createtool', function (Request $request, Response $response, arr
 ]) )
 // Make sure the body is multipart/form-data formatted
 ->add( new MultiPartBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Update a tool
@@ -715,12 +640,8 @@ $app->post('/v1/updatetool', function (Request $request, Response $response, arr
 ]) )
 // Make sure the body is multipart/form-data formatted
 ->add( new MultiPartBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 
@@ -748,12 +669,8 @@ $app->post('/v1/toolcategory', function (Request $request, Response $response, a
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Get keywords for tool description
@@ -775,12 +692,8 @@ $app->post('/v1/toolkeywords', function (Request $request, Response $response, a
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // List all tools available to me
@@ -806,12 +719,8 @@ $app->post('/v1/getalltools', function (Request $request, Response $response, ar
     'search_terms' => 'array',
     'search_with_and' => 'required_with:search_terms'
 ]) )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // List all tools available to me
@@ -836,12 +745,8 @@ $app->post('/v1/gettool', function (Request $request, Response $response, array 
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Create a tool borrow request
@@ -867,12 +772,8 @@ $app->post('/v1/requestborrow', function (Request $request, Response $response, 
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Delete a borrow request
@@ -896,12 +797,8 @@ $app->post('/v1/deleteborrowrequest', function (Request $request, Response $resp
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Accept a tool borrow request
@@ -929,12 +826,8 @@ $app->post('/v1/acceptborrow', function (Request $request, Response $response, a
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Reject a tool borrow request
@@ -960,12 +853,8 @@ $app->post('/v1/rejectborrow', function (Request $request, Response $response, a
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 
@@ -987,12 +876,8 @@ $app->post('/v1/getnotifications', function (Request $request, Response $respons
         return $badresponse->withStatus(500);
     }
 })
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 // Resolve a notification
@@ -1017,12 +902,8 @@ $app->post('/v1/resolvenotification', function (Request $request, Response $resp
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
-// Audit
-->add( new AuditMiddleware() )
 // Mandatory auth
 ->add( new AuthMiddleware() )
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 
@@ -1040,8 +921,6 @@ error_log($e);
         return $badresponse->withStatus(500);
     }
 })
-// Time each request
-->add( new TimerMiddleware() )
 ;
 
 
@@ -1065,11 +944,17 @@ $app->add(function ($request, $handler) {
             ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
 });
 
-// Final cleanup
-$app->add(new CleanupMiddleware([ "userId", "neighborId" ]));
-
 $app->map(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], '/{routes:.+}', function ($request, $response) {
     throw new \Slim\Exception\HttpNotFoundException($request);
 });
+
+// Record an audit record for each request
+$app->add( new AuditMiddleware() );
+// Put the 'ip_address' header on each request
+$app->add(new RKA\Middleware\IpAddress($checkProxyHeaders, $trustedProxies));
+// Time each request
+$app->add( new TimerMiddleware() );
+// Final cleanup to remove secretive stuff from the response
+$app->add(new CleanupMiddleware([ "userId", "neighborId" ]));
 
 $app->run();

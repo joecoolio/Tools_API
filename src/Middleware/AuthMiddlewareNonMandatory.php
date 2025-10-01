@@ -49,7 +49,12 @@ class AuthMiddlewareNonMandatory {
         // If provided, add the userid to the request and send it onward
         if ($userid != null) {
             // Add the userid from the access token to the request
-            return $handler->handle($request->withAttribute("userid", $token['userid'])->withAttribute("neighborId", $token['neighborId']));
+            $response = $handler->handle($request->withAttribute("userid", $token['userid'])->withAttribute("neighborId", $token['neighborId']));
+
+            // Add the username from the access token to the response too
+            return $response
+                ->withHeader("userId", $token['userid'])
+                ->withHeader("neighborId", (string) $token['neighborId']);
         // If not provided, just keep going
         } else {
             return $handler->handle($request);
