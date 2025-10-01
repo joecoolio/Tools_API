@@ -16,7 +16,7 @@ class GetMessagesInChatResponder extends Responder {
         // Get all the messages for the chat
         $stmt = $dbConnPool->prepare("
             select id, from_neighbor, send_ts, message,
-                read_by @> ARRAY[:me]::int[] read
+                :me = any(read_by) or :me = from_neighbor read
             from chat_message
             where chat_id = :chat_id
             order by send_ts desc

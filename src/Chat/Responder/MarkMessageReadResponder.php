@@ -8,7 +8,6 @@ class MarkMessageReadResponder extends Responder {
     public function respond(WebsocketClient $client, PostgresConnectionPool $dbConnPool, array $request): array {
         // Get the user ID
         $myNeighborId = Responder::getMyNeighborId($client);
-
         // Fields for the new message
         $messageId = $request['id'];
 
@@ -18,16 +17,20 @@ class MarkMessageReadResponder extends Responder {
             SET read_by = array_append(read_by, :me)
             WHERE id = :messageId
             AND NOT read_by @> ARRAY[:me]::int[]
+            returning chat_id
         ");
-        $stmt->execute(params: [
+        $result = $stmt->execute(params: [
             "me" => $myNeighborId,
             "messageId" => $messageId,
         ]);
-        $stmt->execute();
+        foreach ($result as $row) {
+            $chatId = $row['chat_id'];
+        }
 
         return [
             "type" => "mark_message_read_result",
             "id" => $messageId,
+            "chat_id" => $chatId,
             "result" => true
         ];
     }

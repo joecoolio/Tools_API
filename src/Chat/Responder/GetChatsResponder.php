@@ -15,7 +15,8 @@ class GetChatsResponder extends Responder {
                 c.id,
                 c.started_ts,
                 max(cm.send_ts) latest_message_ts,
-                array_agg(distinct neighbor_id) FILTER (WHERE neighbor_id != :me) AS other_members
+                array_agg(distinct neighbor_id) FILTER (WHERE neighbor_id != :me) AS other_members,
+                bool_and(:me = any(cm.read_by) or :me = from_neighbor) read
             from
                 chat c
                 inner join chat_neighbor cn

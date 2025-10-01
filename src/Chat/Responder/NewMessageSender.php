@@ -16,7 +16,7 @@ class NewMessageSender extends Responder {
         // Get all the messages for the chat
         $stmt = $dbConnPool->prepare("
             select id, chat_id, from_neighbor, send_ts, message,
-                read_by @> ARRAY[:me]::int[] read
+                :me = any(read_by) or :me = from_neighbor read
             from chat_message
             where id = :msg_id
         ");
