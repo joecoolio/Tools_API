@@ -43,6 +43,7 @@ $dotenv = Dotenv::createImmutable(__DIR__ . '/../..');
 $dotenv->load();
 
 // Stateless responder map
+// The keys are message type values sent from clients.  Then it's handled by the class provided.
 $responderMap = [
     "identify" => IdentifyResponder::class,                 // Identify yourself to the server
     "ping" => PingResponder::class,                         // Ping to keep the connection alive
@@ -56,8 +57,7 @@ $responderMap = [
 // Setup redis
 $redis = Util::getRedisConnection();
 
-// Setup postgresql
-// PostgreSQL connection (async)
+// Setup PostgreSQL connection pool
 $dbInfo = sprintf("host=%s port=%s dbname=%s user=%s password=%s sslmode=require",
     $_ENV['DATABASE_HOST'],
     $_ENV['DATABASE_PORT'],
@@ -69,6 +69,9 @@ $config = PostgresConfig::fromString($dbInfo);
 $postgresConnectionPool = new PostgresConnectionPool($config);
 
 // Clean out redis on startup
+// These are keys created by chat/identify that are specific to connections.
+// CHAT-CONNID-TO-NID-x -> a (websocket cilent id -> neighbor id) map where x is the client id (1-to-1)
+// CHAT-NID-TO-CONNID-x -> a (neighbor id -> websocket client id[]) map where x is the neighbor id (1-to-many)
 $keys = $redis->keys('CHAT-CONNID-TO-NID-*');
 if ($keys) $redis->del($keys);
 $keys = $redis->keys('CHAT-NID-TO-CONNID-*');
@@ -79,7 +82,6 @@ $logHandler = new StreamHandler(getStdout());
 $logHandler->setFormatter(new ConsoleFormatter());
 $logger = new Logger('server');
 $logger->pushHandler($logHandler);
-
 $server = SocketHttpServer::createForDirectAccess($logger);
 
 // Listen on IPv4 and v6
@@ -205,7 +207,7 @@ $clientHandler = new class implements WebsocketClientHandler {
         $logger->debug(message: sprintf("Connection closed: %d", $client->getId()));
 
         // Update last seen date on neighbor to reflect when they logged off
-        $key = "CHAT-WMID-TO-NID-" . $client->getId();
+        $key = "CHAT-CONNID-TO-NID-" . $client->getId();
         $neighborId = $redis->get($key);
 
         if ($neighborId != null) {
@@ -213,12 +215,21 @@ $clientHandler = new class implements WebsocketClientHandler {
                 update neighbor set chat_last_seen = now()
                 where id = :me
             ");
-            $result = $stmt->execute(params: [
+            $stmt->execute(params: [
                 ":me" => $neighborId
             ]);
 
-            // Remove the neighbor mapping
+            // Remove the (conn -> neighbor) mapping
             $redis->del($key);
+        }
+
+        // Remove this client from the (neighbor -> client) 1-to-many map
+        $ntocKey = $key = "CHAT-NID-TO-CONNID-" . $client->getId();
+        $ntoc = $redis->get($key);
+        if ($ntoc != null) {
+            $array = json_decode($ntoc, true);
+            unset($array[$client->getId()]);
+            $redis->set($ntocKey, json_encode($array));
         }
     }
 };
@@ -239,5 +250,5 @@ while (true) delay(100);
 
 // Await SIGINT or SIGTERM to be received.
 // $signal = trapSignal([SIGINT, SIGTERM]);
-// $logger->info(sprintf("Received signal %d, stopping HTTP server", $signal));
+// $logger->info(sprintf("Received signal %d, stopping socket server", $signal));
 // $server->stop();

@@ -122,8 +122,8 @@ abstract class Util {
     // If the friends are in redis already, just return those.
     // If the friends have not been loaded (or have been expired), reload
     // from the database and store in redis.
-    // Return friends that are <= $level.
-    public static function getFriends(int $neighborId, int $level = 999): array {
+    // Return friends that are <= $maxDepth.
+    public static function getFriends(int $neighborId, int $maxDepth = 3): array {
         $friends = null;
         $redisFriendKey = "$neighborId-friends";
 
@@ -149,7 +149,7 @@ abstract class Util {
                         ON f.neighbor_id = fof.friend_id
                     where 
                         f.friend_id != :neighborId
-                        and fof.depth < 10
+                        and fof.depth < :max_depth
                 ), numbered as (
                     select
                         fof.*,
@@ -175,6 +175,7 @@ abstract class Util {
             $stmt = $pdo->prepare($sql);
             $stmt->execute(params: [
                 ':neighborId' => $neighborId,
+                ':max_depth' => $maxDepth
             ]);
             $friends = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -190,7 +191,7 @@ abstract class Util {
         }
 
         // Filter friends by level (depth <= $level)
-        return array_filter($friends, fn($friend) => $friend['depth'] <= $level);
+        return array_filter($friends, fn($friend) => $friend['depth'] <= $maxDepth);
     }
 
     // Remove the friends for a user from redis.
