@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Exception;
 use \PDO;
 use \App\Util;
 use Rakit\Validation\Rules\Boolean;
@@ -343,51 +344,68 @@ class Tool extends BaseModel {
     public function requestBorrowTool(int $myNeighborId, int $targetToolId, string $message): void {
         $pdo = Util::getDbConnection();
 
-        $pdo->beginTransaction();
-        try {
-            // Create the request in the notification table.  If there's already a request, just do nothing.
-            $stmt = $pdo->prepare("
-                insert into notification (to_neighbor, from_neighbor, type, message, data)
-                select t.owner_id, :myNeighborId, 'borrow_request', :message, jsonb_build_object('tool_id', t.id)
-                from tool t
-                where t.id = :toolId
-                and not exists (
-                    select 1
-                    from notification x
-                    where x.to_neighbor = t.owner_id
-                    and x.from_neighbor = :myNeighborId
-                    and x.type = 'borrow_request'
-                    and x.data @> jsonb_build_object('tool_id', t.id)
-                )
-            ");
-            $stmt->execute(params: [
-                ":myNeighborId" => $myNeighborId,
-                ":toolId" => $targetToolId,
-                ":message" => $message
-            ]);
-            // If the request was created, send a 2nd notification to the caller
-            if ($stmt->rowCount() > 0) {
+        // Make sure the other guy is my friend as you can only borrow from friends.
+        $friends = Util::getFriends($myNeighborId);
+
+        $stmt = $pdo->prepare("
+            select owner_id from tool where id = :toolId
+        ");
+        $stmt->execute(params: [
+            ":toolId" => $targetToolId,
+        ]);
+        $ownerNeighborId = $stmt->fetchColumn();
+
+        // Verify the provided neighbor is my friend
+        if (array_key_exists($ownerNeighborId, $friends)) {
+            $pdo->beginTransaction();
+            try {
+                // Create the request in the notification table.  If there's already a request, just do nothing.
                 $stmt = $pdo->prepare("
                     insert into notification (to_neighbor, from_neighbor, type, message, data)
-                    select :myNeighborId, null, 'system_message',
-                        'Your request to borrow ' || n.name || '''s ' || t.short_name || ' was sent.  We will send you another message when they reply!',
-                        jsonb_build_object('tool_id', t.id)
-                    from
-                        tool t
-                        inner join neighbor n
-                            on t.owner_id  = n.id
+                    select t.owner_id, :myNeighborId, 'borrow_request', :message, jsonb_build_object('tool_id', t.id)
+                    from tool t
                     where t.id = :toolId
+                    and not exists (
+                        select 1
+                        from notification x
+                        where x.to_neighbor = t.owner_id
+                        and x.from_neighbor = :myNeighborId
+                        and x.type = 'borrow_request'
+                        and x.data @> jsonb_build_object('tool_id', t.id)
+                    )
                 ");
-            }
-            $stmt->execute(params: [
-                ":myNeighborId" => $myNeighborId,
-                ":toolId" => $targetToolId
-            ]);
+                $stmt->execute(params: [
+                    ":myNeighborId" => $myNeighborId,
+                    ":toolId" => $targetToolId,
+                    ":message" => $message
+                ]);
+                // If the request was created, send a 2nd notification to the caller
+                if ($stmt->rowCount() > 0) {
+                    $stmt = $pdo->prepare("
+                        insert into notification (to_neighbor, from_neighbor, type, message, data)
+                        select :myNeighborId, null, 'system_message',
+                            'Your request to borrow ' || n.name || '''s ' || t.short_name || ' was sent.  We will send you another message when they reply!',
+                            jsonb_build_object('tool_id', t.id)
+                        from
+                            tool t
+                            inner join neighbor n
+                                on t.owner_id  = n.id
+                        where t.id = :toolId
+                    ");
+                }
+                $stmt->execute(params: [
+                    ":myNeighborId" => $myNeighborId,
+                    ":toolId" => $targetToolId
+                ]);
 
-            $pdo->commit();
-        } catch (\PDOException $e) {
-            $pdo->rollBack();
-            throw $e;
+                $pdo->commit();
+            } catch (\PDOException $e) {
+                $pdo->rollBack();
+                throw $e;
+            }
+        } else {
+            error_log("Permission denied: neighbor $targetToolId is owned by $$ownerNeighborId who is not my friend");
+            throw new Exception("Permission denied: neighbor $targetToolId is owned by $$ownerNeighborId who is not my friend");
         }
     }
 

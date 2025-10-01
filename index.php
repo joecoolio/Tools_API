@@ -349,7 +349,6 @@ $app->post('/v1/getneighbor', function (Request $request, Response $response, ar
         return $badresponse->withStatus(500);
     }
 })
-// TODO: Make sure this guy is my friend
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
     'neighborId' => 'required|integer'
@@ -375,7 +374,6 @@ $app->post('/v1/getImage', function (Request $request, Response $response, array
         return $badresponse->withStatus(500);
     }
 })
-// TODO: Make sure this guy is my friend
 // Make sure the id is in the body
 ->add( new ValidateMiddleware([
     'photo_id' => 'required'
