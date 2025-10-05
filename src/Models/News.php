@@ -4,14 +4,11 @@ namespace App\Models;
 
 use \PDO;
 use \App\Util;
-use Psr\Http\Message\ResponseInterface as Response;
-use Rakit\Validation\Rules\Boolean;
-use \Slim\Psr7\Stream;
 
 
 class News extends BaseModel {
     // Get all news items or the subset after a specified id
-    public function getNews(int $myNeighborId, float $radiusMiles = 2 /* 2 miles default */, int $afterId = 0 /* default to all */): array {
+    public function getNews(int $myNeighborId, ?float $radiusMiles = 2 /* 2 miles default */, int $afterId = 0 /* default to all */, int $beforeId = 99999999 /* default to all */, int $maxItems = 10): array {
         $pdo = Util::getDbConnection();
         $stmt = $pdo->prepare('
             with me as (
@@ -35,13 +32,17 @@ class News extends BaseModel {
                     :radius
                 )
                 and n.id > :afterId
+                and n.id < :beforeId
             order by
                 n.occur_ts
+            limit :maxItems
         ');
         $stmt->execute(params: [
             ':myNeighborId' => $myNeighborId,
             ':radius' => $radiusMiles * 1.60934 * 1000,
             ':afterId' => $afterId,
+            ':beforeId' => $beforeId,
+            ':maxItems' => $maxItems
         ]);
         $news = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

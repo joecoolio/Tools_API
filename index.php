@@ -914,10 +914,13 @@ $app->post('/v1/news', function (Request $request, Response $response, array $ar
     try {
         $neighborId = $request->getAttribute("neighborId");
         $bodyArray = $request->getParsedBody();
-        $radiusMiles = $bodyArray["radius_miles"];
-        $afterId =  $bodyArray["afterId"];
 
-        $retval = (new News())->getNews($neighborId, $radiusMiles, $afterId);
+        $radiusMiles = array_key_exists("radius_miles", $bodyArray) ? $bodyArray["radius_miles"] : 2;
+        $afterId = array_key_exists("afterId", $bodyArray) ? $bodyArray["afterId"] : 0;
+        $beforeId = array_key_exists("beforeId", $bodyArray) ? $bodyArray["beforeId"] : 999999999;
+        $maxItems = array_key_exists("max_items", $bodyArray) ? $bodyArray["max_items"] : 10;
+
+        $retval = (new News())->getNews($neighborId, $radiusMiles, $afterId, $beforeId, $maxItems);
         return $response->withJson($retval);
     } catch (Exception $e) {
         $badresponse = new \GuzzleHttp\Psr7\Response();
@@ -929,6 +932,8 @@ $app->post('/v1/news', function (Request $request, Response $response, array $ar
 ->add( new ValidateMiddleware([
     'radius_miles' => 'numeric', // Request news in this radius of me
     'afterId' => 'integer', // Request news items > than this id (to get only new stuff)
+    'beforeId' => 'integer', // Request items < this id (to get older stuff) -- after & before won't work together obviously
+    'max_items' => 'integer' // Give me at most this many items
 ]) )
 // Make sure the body is JSON formatted
 ->add( new JSONBodyMiddleware() )
