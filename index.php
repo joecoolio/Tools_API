@@ -1,4 +1,5 @@
 <?php
+
 use App\Models\GemeniAI;
 use Slim\Http\Response as Response;
 use Slim\Http\ServerRequest as Request;
@@ -6,7 +7,7 @@ use Psr\Http\Server\RequestHandlerInterface as RequestHandler;
 
 use Slim\Factory\AppFactory;
 
-// // Middleware classes
+// Middleware classes
 use App\Middleware\JSONBodyMiddleware;
 use App\Middleware\MultiPartBodyMiddleware;
 use App\Middleware\TimerMiddleware;
@@ -18,16 +19,17 @@ use App\Middleware\AuditMiddleware;
 use App\Middleware\SendNotificationMiddleware;
 use App\Middleware\CleanupMiddleware;
 
-// // Auth classes
+// Auth classes
 use App\Auth\AuthUserLogin;
 use App\Auth\AuthUserRegister;
 use App\Auth\AuthRefreshToken;
 
-// // User clases
+// User clases
 use App\Util;
 use App\Models\Neighbor;
 use App\Models\Tool;
 use App\Models\User;
+use App\Models\News;
 use App\Models\PushNotification;
 
 require 'vendor/autoload.php';
@@ -903,6 +905,37 @@ $app->post('/v1/resolvenotification', function (Request $request, Response $resp
 // Mandatory auth
 ->add( new AuthMiddleware() )
 ;
+
+
+/////
+// News
+/////
+$app->post('/v1/news', function (Request $request, Response $response, array $args) {
+    try {
+        $neighborId = $request->getAttribute("neighborId");
+        $bodyArray = $request->getParsedBody();
+        $radiusMiles = $bodyArray["radius_miles"];
+        $afterId =  $bodyArray["afterId"];
+
+        $retval = (new News())->getNews($neighborId, $radiusMiles, $afterId);
+        return $response->withJson($retval);
+    } catch (Exception $e) {
+        $badresponse = new \GuzzleHttp\Psr7\Response();
+        $badresponse->getBody()->write(json_encode($e->getMessage()));
+        return $badresponse->withStatus(500);
+    }
+})
+//  the id is in the body
+->add( new ValidateMiddleware([
+    'radius_miles' => 'numeric', // Request news in this radius of me
+    'afterId' => 'integer', // Request news items > than this id (to get only new stuff)
+]) )
+// Make sure the body is JSON formatted
+->add( new JSONBodyMiddleware() )
+// Mandatory auth
+->add( new AuthMiddleware() )
+;
+
 
 
 
