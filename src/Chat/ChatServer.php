@@ -216,7 +216,7 @@ $clientHandler = new class implements WebsocketClientHandler {
                 where id = :me
             ");
             $stmt->execute(params: [
-                ":me" => $neighborId
+                "me" => $neighborId
             ]);
 
             // Remove the (conn -> neighbor) mapping
