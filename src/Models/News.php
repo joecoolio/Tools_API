@@ -34,7 +34,8 @@ class News extends BaseModel {
                 and n.id > :afterId
                 and n.id < :beforeId
             order by
-                n.occur_ts
+                n.occur_ts desc,
+                n.id desc
             limit :maxItems
         ');
         $stmt->execute(params: [
