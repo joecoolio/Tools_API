@@ -109,7 +109,7 @@ $clientHandler = new class implements WebsocketClientHandler {
             global $postgresConnectionPool;
             global $logger;
 
-            $channel_name = 'new_chat_message';
+            $channel_name = 'new_chat_message' . $_ENV['CHAT_CHANNEL_SUFFIX'];
             $listener = $postgresConnectionPool->listen($channel_name);
             $logger->debug(message: sprintf("Listening on channel: %s", $channel_name));
             foreach ($listener as $notification) {
